@@ -23,25 +23,20 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!username || !password) {
+    if (!username.trim() || !password) {
       setError("Please enter both username and password");
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const result = login(username, password);
+    try {
+      const result = await login(username.trim(), password);
       if (!result.success) {
         setError(result.message);
       }
+    } finally {
       setLoading(false);
-    }, 300);
-  };
-
-  const handleDemo = (demoUser) => {
-    setUsername(demoUser.username);
-    setPassword(demoUser.password);
-    setError("");
+    }
   };
 
   return (

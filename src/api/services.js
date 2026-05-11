@@ -1,5 +1,17 @@
 import client from "./client";
 
+export const authService = {
+  login: (credentials) => client.post("/auth/login", credentials).then((r) => r.data),
+  logout: (token) =>
+    client
+      .post(
+        "/auth/logout",
+        {},
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+      )
+      .then((r) => r.data),
+};
+
 export const configService = {
   getConfig: (params = {}) => client.get("/config", { params }).then((r) => r.data),
 };

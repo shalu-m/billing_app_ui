@@ -203,7 +203,7 @@ export default function App() {
 
                 <Stack direction="row" alignItems="center" spacing={1}>
                   <Typography variant="body2" fontWeight={600}>
-                    {user.username}
+                    {user.name}
                   </Typography>
                   <IconButton
                     size="small"
@@ -224,7 +224,7 @@ export default function App() {
                         fontSize: "0.8rem",
                       }}
                     >
-                      {user.username[0].toUpperCase()}
+                      {user.name[0].toUpperCase()}
                     </Avatar>
                   </IconButton>
                 </Stack>

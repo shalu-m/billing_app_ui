@@ -1,11 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { authService } from "../api/services";
 
 const AuthContext = createContext();
-
-const DEFAULT_USERS = [
-  { id: 1, username: "admin", password: "admin123" },
-  { id: 2, username: "user", password: "user123" },
-];
+const USER_STORAGE_KEY = "loggedInUser";
+const TOKEN_STORAGE_KEY = "authToken";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -13,36 +11,55 @@ export function AuthProvider({ children }) {
 
   // Check if user is logged in (from localStorage) on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem("loggedInUser");
-    if (storedUser) {
+    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+
+    if (storedUser && storedToken) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (e) {
         console.error("Failed to restore user session");
-        localStorage.removeItem("loggedInUser");
+        localStorage.removeItem(USER_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
       }
+    } else {
+      localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
     }
+
     setLoading(false);
   }, []);
 
-  const login = (username, password) => {
-    const foundUser = DEFAULT_USERS.find(
-      (u) => u.username === username && u.password === password
-    );
-
-    if (foundUser) {
-      const userData = { id: foundUser.id, username: foundUser.username };
+  const login = async (username, password) => {
+    try {
+      const { user: userData, token } = await authService.login({
+        username,
+        password,
+      });
       setUser(userData);
-      localStorage.setItem("loggedInUser", JSON.stringify(userData));
-      return { success: true };
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      return { success: true, user: userData };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message || "Invalid username or password",
+      };
     }
-
-    return { success: false, message: "Invalid username or password" };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const logoutRequest = authService.logout(token);
     setUser(null);
-    localStorage.removeItem("loggedInUser");
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+
+    try {
+      await logoutRequest;
+    } catch (error) {
+      console.error("Failed to notify API about logout", error);
+    }
   };
 
   return (
