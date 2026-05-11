@@ -1,12 +1,13 @@
 // src/components/Sidebar.jsx
 import {
   Drawer, Box, List, ListItemButton, ListItemIcon,
-  ListItemText, Typography, Divider, Avatar, Stack, Tooltip,
+  ListItemText, Typography, Divider,
 } from "@mui/material";
 import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import EggOutlinedIcon from "@mui/icons-material/EggOutlined";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import BarChartOutlinedIcon from "@mui/icons-material/BarChartOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
@@ -18,6 +19,7 @@ const NAV_ITEMS = {
   supermarket: [
     { label: "Billing", value: "billing", icon: <ReceiptOutlinedIcon fontSize="small" /> },
     { label: "Products", value: "products", icon: <InventoryOutlinedIcon fontSize="small" /> },
+    { label: "Stock", value: "stock", icon: <LocalShippingOutlinedIcon fontSize="small" /> },
     { label: "Bill Details", value: "billdetails", icon: <ListAltOutlinedIcon fontSize="small" /> },
     { label: "Reports", value: "reports", icon: <BarChartOutlinedIcon fontSize="small" /> },
   ],

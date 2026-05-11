@@ -1,88 +1,171 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Box, Grid, Card, CardContent, Typography, TextField, Button,
-  Stack, IconButton, MenuItem, InputAdornment, Tooltip, Chip,
-  Pagination, CircularProgress
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Grid,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Pagination,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material";
 
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import AddIcon from "@mui/icons-material/Add";
-import SearchIcon from "@mui/icons-material/Search";
-import RefreshIcon from "@mui/icons-material/Refresh";
-
-import { PRODUCT_UNITS } from "../../data/mockData";
-import { formatCurrency } from "../../utils/helpers";
-import { DataTable, Toast, ConfirmDialog } from "../../components/shared";
-import { productService } from "../../api/services";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import QrCodeIcon from "@mui/icons-material/QrCode";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
 import debounce from "lodash.debounce";
+
+import { productService } from "../../api/services";
+import { ConfirmDialog, DataTable, Toast } from "../../components/shared";
 import { useConfirm } from "../../hooks/useConfirm";
+import { useConfig } from "../../hooks/useConfig";
+import { formatCurrency, isBulkProduct } from "../../utils/helpers";
 
-
-const EMPTY_FORM = {
+const EMPTY_PRODUCT_FORM = {
   name: "",
   unit: "kg",
+  barcode: "",
   cost_price: "",
   selling_price: "",
-  sgst: "",
+  purchase_unit: "",
+  purchase_qty: "",
+  wholesale_cost: "",
+  wholesale_price: "",
   cgst: "",
+  sgst: "",
   stock: "",
-  barcode: ""
+  is_active: true,
 };
 
+const asNumberOrNull = (value) =>
+  value === "" || value === null || value === undefined ? null : Number(value);
+
+const cleanProductPayload = (form, editing) => {
+  const payload = {
+    name: form.name.trim(),
+    unit: form.unit,
+    cost_price: Number(form.cost_price),
+    selling_price: Number(form.selling_price),
+    sgst: Number(form.sgst || 0),
+    cgst: Number(form.cgst || 0),
+    barcode: form.barcode?.trim() || null,
+    is_active: form.is_active ?? true,
+    purchase_unit: form.purchase_unit || null,
+    purchase_qty: form.purchase_unit ? Number(form.purchase_qty) : null,
+    wholesale_cost: form.purchase_unit ? asNumberOrNull(form.wholesale_cost) : null,
+    wholesale_price: form.purchase_unit ? asNumberOrNull(form.wholesale_price) : null,
+  };
+
+  if (!editing) {
+    payload.stock = Number(form.stock || 0);
+  }
+
+  return payload;
+};
+
+const productToForm = (product) => ({
+  name: product.name || "",
+  unit: product.unit || "kg",
+  barcode: product.barcode || "",
+  cost_price: product.cost_price ?? "",
+  selling_price: product.selling_price ?? "",
+  purchase_unit: product.purchase_unit || "",
+  purchase_qty: product.purchase_qty ?? "",
+  wholesale_cost: product.wholesale_cost ?? "",
+  wholesale_price: product.wholesale_price ?? "",
+  cgst: product.cgst ?? "",
+  sgst: product.sgst ?? "",
+  stock: product.stock ?? "",
+  is_active: product.is_active ?? true,
+});
+
+const normalizeCollection = (res) => (Array.isArray(res.data) ? res.data : res.data?.data || []);
+
 export default function ProductsPage() {
+  const { config } = useConfig();
+  const productUnits = config?.product_units || [];
+  const purchaseUnits = config?.purchase_units || [];
+  // Combine both for dropdowns that allow either
+  const allUnits = [...new Set([...productUnits, ...purchaseUnits])];
+  
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(EMPTY_PRODUCT_FORM);
   const [editId, setEditId] = useState(null);
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   const { confirm, dialogProps } = useConfirm();
 
   const barcodeBufferRef = useRef("");
-  const barcodeTimerRef  = useRef(null);
-  const barcodeFieldRef  = useRef(null);
+  const barcodeTimerRef = useRef(null);
+  const nameRef = useRef(null);
+  const unitFieldRef = useRef(null);
+  const barcodeFieldRef = useRef(null);
+  const costRef = useRef(null);
+  const sellingRef = useRef(null);
+  const purchaseUnitRef = useRef(null);
+  const purchaseQtyRef = useRef(null);
+  const wholesaleCostRef = useRef(null);
+  const wholesalePriceRef = useRef(null);
+  const cgstRef = useRef(null);
+  const sgstRef = useRef(null);
+  const stockRef = useRef(null);
 
-  const nameRef     = useRef(null);
-  const unitRef     = useRef(null);
-  const costRef     = useRef(null);
-  const sellingRef  = useRef(null);
-  const cgstRef     = useRef(null);
-  const sgstRef     = useRef(null);
-  const stockRef    = useRef(null);
+  const margin = useMemo(() => {
+    if (!form.cost_price || !form.selling_price) return null;
+    const selling = Number(form.selling_price);
+    if (selling <= 0) return null;
+    return (((selling - Number(form.cost_price)) / selling) * 100).toFixed(1);
+  }, [form.cost_price, form.selling_price]);
 
-  // 🔥 FETCH PRODUCTS
-  const fetchProducts = async () => {
+  const autoWholesalePrice =
+    form.purchase_unit && form.purchase_qty
+      ? Number(form.selling_price || 0) * Number(form.purchase_qty || 0)
+      : 0;
+  const autoWholesaleCost =
+    form.purchase_unit && form.purchase_qty
+      ? Number(form.cost_price || 0) * Number(form.purchase_qty || 0)
+      : 0;
+
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
       const res = await productService.list({
         page,
-        search, 
+        search,
         per_page: 10,
         sort_by: "name",
         sort_dir: "asc",
       });
 
-      setProducts(res.data);
-      setTotalPages(res.meta.last_page);
+      setProducts(normalizeCollection(res));
+      setTotalPages(res.meta?.last_page || 1);
     } catch (e) {
-      setToast({ open: true, message: "Failed to fetch products", severity: "error" });
+      setToast({ open: true, message: e.message || "Failed to fetch products", severity: "error" });
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, search]);
 
   useEffect(() => {
     fetchProducts();
-  }, [page, search]);
+  }, [fetchProducts]);
 
-  // BARCODE SCANNING
   useEffect(() => {
     const handleKey = (e) => {
       const tag = document.activeElement?.tagName;
@@ -92,7 +175,7 @@ export default function ProductsPage() {
         const barcode = barcodeBufferRef.current.trim();
         if (barcode) {
           setForm((f) => ({ ...f, barcode }));
-          barcodeFieldRef.current?.focus();
+          setTimeout(() => barcodeFieldRef.current?.focus(), 0);
         }
         barcodeBufferRef.current = "";
       } else if (e.key === "Backspace") {
@@ -102,7 +185,7 @@ export default function ProductsPage() {
         clearTimeout(barcodeTimerRef.current);
         barcodeTimerRef.current = setTimeout(() => {
           barcodeBufferRef.current = "";
-        }, 2000);
+        }, 1200);
       }
     };
 
@@ -112,95 +195,113 @@ export default function ProductsPage() {
       clearTimeout(barcodeTimerRef.current);
     };
   }, []);
-  
 
-  // 🔍 VALIDATION
-  const validate = () => {
-    const e = {};
-    if (!form.name.trim()) e.name = "Required";
-    if (!form.cost_price || +form.cost_price <= 0) e.cost_price = "Must be > 0";
-    if (!form.selling_price || +form.selling_price <= 0) e.selling_price = "Must be > 0";
-    if (+form.selling_price < +form.cost_price) e.selling_price = "Must be ≥ cost price";
-    if (form.stock === "" || +form.stock < 0) e.stock = "Required";
+  const validateProduct = () => {
+    const nextErrors = {};
+    const cost = Number(form.cost_price);
+    const selling = Number(form.selling_price);
 
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    if (!form.name.trim()) nextErrors.name = "Required";
+    if (!form.unit) nextErrors.unit = "Required";
+    if (form.cost_price === "" || cost < 0) nextErrors.cost_price = "Must be 0 or more";
+    if (form.selling_price === "" || selling < 0) nextErrors.selling_price = "Must be 0 or more";
+    if (form.cost_price !== "" && form.selling_price !== "" && selling < cost) {
+      nextErrors.selling_price = "Must be at least cost price";
+    }
+    if (!editId && (form.stock === "" || Number(form.stock) < 0)) nextErrors.stock = "Required";
+    if (form.purchase_unit && (!form.purchase_qty || Number(form.purchase_qty) <= 0)) {
+      nextErrors.purchase_qty = "Required for bulk products";
+    }
+    if (Number(form.sgst || 0) > 100) nextErrors.sgst = "Max 100";
+    if (Number(form.cgst || 0) > 100) nextErrors.cgst = "Max 100";
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  // ➕ CREATE / UPDATE
   const handleSubmit = async () => {
-    if (!validate()) return;
-    const ok = await confirm(`Are you sure you want to save?`);
+    if (!validateProduct()) return;
+    const ok = await confirm(editId ? "Update this product?" : "Add this product?");
     if (!ok) return;
+
     try {
+      const payload = cleanProductPayload(form, Boolean(editId));
       if (editId) {
-        await productService.update(editId, form);
+        await productService.update(editId, payload);
         setToast({ open: true, message: "Product updated", severity: "success" });
       } else {
-        await productService.create(form);
+        await productService.create(payload);
         setToast({ open: true, message: "Product added", severity: "success" });
       }
-
-      reset();
+      resetProductForm();
       fetchProducts();
     } catch (e) {
-      setToast({ open: true, message: "Save failed", severity: "error" });
+      setToast({ open: true, message: e.message || "Save failed", severity: "error" });
     }
   };
 
-  // ✏️ EDIT
   const handleEdit = (row) => {
     setEditId(row.id);
-    setForm(row);
+    setForm(productToForm(row));
     setErrors({});
   };
 
-  // 🗑 DELETE
   const handleDelete = async (id) => {
+    const ok = await confirm("Delete this product?");
+    if (!ok) return;
+
     try {
-      const ok = await confirm(`Are you sure you want to delete this product?`);
-      if (!ok) return;
       await productService.delete(id);
-      setToast({ open: true, message: "Deleted successfully", severity: "info" });
+      setToast({ open: true, message: "Product deleted", severity: "info" });
       fetchProducts();
-    } catch {
-      setToast({ open: true, message: "Delete failed", severity: "error" });
+    } catch (e) {
+      setToast({ open: true, message: e.message || "Delete failed", severity: "error" });
     }
   };
 
-  // 🔄 RESET
-  const reset = () => {
-    setForm(EMPTY_FORM);
+  const resetProductForm = () => {
+    setForm(EMPTY_PRODUCT_FORM);
     setEditId(null);
     setErrors({});
   };
 
-  // Search 
   const handleSearchChange = debounce((e) => {
     setSearch(e.target.value);
     setPage(1);
   }, 300);
 
-  const margin =
-    form.cost_price && form.selling_price
-      ? (((+form.selling_price - +form.cost_price) / +form.selling_price) * 100).toFixed(1)
-      : null;
-
   const columns = [
-    { field: "name", label: "Product Name" },
-    { field: "unit", label: "Unit" },
+    {
+      field: "name",
+      label: "Product Name",
+      render: (v, row) => (
+        <Stack spacing={0.25}>
+          <Typography variant="body2" fontWeight={700}>{v}</Typography>
+          {row.barcode && <Typography variant="caption" color="text.secondary">{row.barcode}</Typography>}
+        </Stack>
+      ),
+    },
+    {
+      field: "unit",
+      label: "Unit",
+      render: (_, row) =>
+        isBulkProduct(row)
+          ? `${row.unit} / ${row.purchase_unit} (x${row.purchase_qty})`
+          : row.unit,
+    },
     { field: "cost_price", label: "Cost", render: (v) => formatCurrency(v) },
     { field: "selling_price", label: "Selling", render: (v) => formatCurrency(v) },
-    { field: "sgst", label: "SGST %", render: (v) => `${v}%` },
-    { field: "cgst", label: "CGST %", render: (v) => `${v}%` },
+    { field: "sgst", label: "SGST %", render: (v) => `${Number(v || 0).toFixed(2)}%` },
+    { field: "cgst", label: "CGST %", render: (v) => `${Number(v || 0).toFixed(2)}%` },
     {
       field: "stock",
       label: "Stock",
       render: (v, row) => (
         <Chip
-          label={`${v} ${row.unit}`}
-          color={v < 20 ? "error" : v < 50 ? "warning" : "success"}
+          label={`${Number(v || 0).toLocaleString("en-IN")} ${row.unit}`}
+          color={Number(v) < 20 ? "error" : Number(v) < 50 ? "warning" : "success"}
           size="small"
+          variant="outlined"
         />
       ),
     },
@@ -209,12 +310,16 @@ export default function ProductsPage() {
       label: "Actions",
       render: (_, row) => (
         <Stack direction="row">
-          <IconButton onClick={() => handleEdit(row)}>
-            <EditOutlinedIcon />
-          </IconButton>
-          <IconButton color="error" onClick={() => handleDelete(row.id)}>
-            <DeleteOutlineIcon />
-          </IconButton>
+          <Tooltip title="Edit product">
+            <IconButton size="small" onClick={() => handleEdit(row)}>
+              <EditOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete product">
+            <IconButton size="small" color="error" onClick={() => handleDelete(row.id)}>
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Stack>
       ),
     },
@@ -223,16 +328,13 @@ export default function ProductsPage() {
   return (
     <Box>
       <Grid container spacing={2}>
-        {/* LEFT TABLE */}
         <Grid item xs={12} lg={8}>
           <Card>
             <CardContent>
-
-              {/* SEARCH */}
               <Stack direction="row" mb={2}>
                 <TextField
                   fullWidth
-                  placeholder="Search products..."
+                  placeholder="Search products"
                   onChange={handleSearchChange}
                   InputProps={{
                     startAdornment: (
@@ -245,20 +347,14 @@ export default function ProductsPage() {
               </Stack>
 
               {loading ? (
-                <Box textAlign="center">
+                <Box textAlign="center" py={4}>
                   <CircularProgress />
                 </Box>
               ) : (
                 <>
                   <DataTable columns={columns} rows={products} />
-
-                  {/* PAGINATION */}
                   <Box mt={2} display="flex" justifyContent="center">
-                    <Pagination
-                      count={totalPages}
-                      page={page}
-                      onChange={(e, val) => setPage(val)}
-                    />
+                    <Pagination count={totalPages} page={page} onChange={(e, val) => setPage(val)} />
                   </Box>
                 </>
               )}
@@ -269,122 +365,236 @@ export default function ProductsPage() {
         <Grid item xs={12} lg={4}>
           <Card>
             <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="subtitle1" fontWeight={700}>{editId ? "Edit Product" : "Add Product"}</Typography>
-                {editId && (
-                  <Tooltip title="Reset form">
-                    <IconButton size="small" onClick={reset}><RefreshIcon fontSize="small" /></IconButton>
-                  </Tooltip>
-                )}
-              </Stack>
-
               <Stack spacing={2}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {editId ? "Edit Product" : "Add Product"}
+                  </Typography>
+                  <Tooltip title="Reset form">
+                    <IconButton size="small" onClick={resetProductForm}>
+                      <RefreshIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+
                 <TextField
                   fullWidth
                   label="Product Name *"
                   inputRef={nameRef}
-                  onKeyDown={(e) => e.key === "Enter" && unitRef.current?.focus()}
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  error={!!errors.name}
+                  onKeyDown={(e) => e.key === "Enter" && unitFieldRef.current?.focus()}
+                  error={Boolean(errors.name)}
                   helperText={errors.name}
                 />
 
-                <Grid container spacing={0.5}>
-                  <Grid item xs={6}>
+                <Grid container spacing={1}>
+                  <Grid item xs={5}>
                     <TextField
-                      select fullWidth label="Unit"
-                      inputRef={unitRef}
-                      onKeyDown={(e) => e.key === "Enter" && barcodeFieldRef.current?.focus()}
+                      select
+                      fullWidth
+                      label="Unit"
+                      inputRef={unitFieldRef}
                       value={form.unit}
                       onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && barcodeFieldRef.current?.focus()}
+                      error={Boolean(errors.unit)}
+                      helperText={errors.unit}
                     >
-                      {PRODUCT_UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+                      {productUnits.map((unit) => (
+                        <MenuItem key={unit} value={unit}>{unit}</MenuItem>
+                      ))}
                     </TextField>
                   </Grid>
-                  <Grid item xs={6}>
+                  <Grid item xs={7}>
                     <TextField
-                      fullWidth label="Barcode"
-                      value={form.barcode}
+                      fullWidth
+                      label="Barcode"
                       inputRef={barcodeFieldRef}
-                      onKeyDown={(e) => e.key === "Enter" && costRef.current?.focus()}
+                      value={form.barcode}
                       onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-                      InputProps={{ startAdornment: <InputAdornment position="start"><QrCodeIcon fontSize="small" color="action" /></InputAdornment> }}
+                      onKeyDown={(e) => e.key === "Enter" && costRef.current?.focus()}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <QrCodeIcon fontSize="small" color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   </Grid>
                 </Grid>
 
-                <Grid container spacing={0.5}>
+                <Grid container spacing={1}>
                   <Grid item xs={6}>
                     <TextField
-                      fullWidth label="Cost Price *" type="number"
+                      fullWidth
+                      label="Cost Price *"
+                      type="number"
                       inputRef={costRef}
-                      onKeyDown={(e) => e.key === "Enter" && sellingRef.current?.focus()}
                       value={form.cost_price}
                       onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
-                      error={!!errors.cost_price} helperText={errors.cost_price}
+                      onKeyDown={(e) => e.key === "Enter" && sellingRef.current?.focus()}
+                      error={Boolean(errors.cost_price)}
+                      helperText={errors.cost_price}
                       InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
                     />
                   </Grid>
                   <Grid item xs={6}>
                     <TextField
-                      fullWidth label="Selling Price *" type="number"
+                      fullWidth
+                      label="Selling Price *"
+                      type="number"
                       inputRef={sellingRef}
-                      onKeyDown={(e) => e.key === "Enter" && cgstRef.current?.focus()}
                       value={form.selling_price}
                       onChange={(e) => setForm((f) => ({ ...f, selling_price: e.target.value }))}
-                      error={!!errors.selling_price} helperText={errors.selling_price}
+                      onKeyDown={(e) => e.key === "Enter" && purchaseUnitRef.current?.focus()}
+                      error={Boolean(errors.selling_price)}
+                      helperText={errors.selling_price}
                       InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
                     />
                   </Grid>
                 </Grid>
 
                 {margin !== null && (
-                  <Box sx={{ bgcolor: +margin > 0 ? "success.light" : "error.light", borderRadius: 1, px: 1.5, py: 1 }}>
-                    <Typography variant="caption" color={+margin > 0 ? "success.dark" : "error.dark"} fontWeight={600}>
-                      Margin: {margin}% {+margin < 5 && "⚠ Low margin"}
-                    </Typography>
-                  </Box>
+                  <Alert severity={Number(margin) >= 15 ? "success" : Number(margin) >= 8 ? "warning" : "error"} icon={false}>
+                    Margin: <strong>{margin}%</strong>
+                  </Alert>
                 )}
 
-                <Grid container spacing={0.5}>
+                <Alert severity="info" icon={false}>
+                  Use bulk fields only for items sold both loose and wholesale, like rice, oil, sugar, tins or sacks.
+                </Alert>
+
+                <Grid container spacing={1}>
                   <Grid item xs={6}>
                     <TextField
-                      fullWidth label="CGST (%)" type="number"
+                      select
+                      fullWidth
+                      label="Purchase Unit"
+                      inputRef={purchaseUnitRef}
+                      value={form.purchase_unit || ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          purchase_unit: e.target.value,
+                          purchase_qty: e.target.value ? f.purchase_qty : "",
+                          wholesale_cost: e.target.value ? f.wholesale_cost : "",
+                          wholesale_price: e.target.value ? f.wholesale_price : "",
+                        }))
+                      }
+                      onKeyDown={(e) => e.key === "Enter" && purchaseQtyRef.current?.focus()}
+                    >
+                      <MenuItem value="">None</MenuItem>
+                      {allUnits.map((unit) => (
+                        <MenuItem key={unit} value={unit}>{unit}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="Conversion Qty"
+                      type="number"
+                      inputRef={purchaseQtyRef}
+                      value={form.purchase_qty}
+                      disabled={!form.purchase_unit}
+                      onChange={(e) => setForm((f) => ({ ...f, purchase_qty: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && wholesaleCostRef.current?.focus()}
+                      error={Boolean(errors.purchase_qty)}
+                      helperText={errors.purchase_qty || (form.purchase_unit ? `1 ${form.purchase_unit} = ? ${form.unit}` : "")}
+                    />
+                  </Grid>
+                </Grid>
+
+                {form.purchase_unit && (
+                  <>
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <TextField
+                          fullWidth
+                          label="Wholesale Cost"
+                          type="number"
+                          inputRef={wholesaleCostRef}
+                          value={form.wholesale_cost}
+                          onChange={(e) => setForm((f) => ({ ...f, wholesale_cost: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && wholesalePriceRef.current?.focus()}
+                          helperText={`Auto ${formatCurrency(autoWholesaleCost)}`}
+                          InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField
+                          fullWidth
+                          label="Wholesale Price"
+                          type="number"
+                          inputRef={wholesalePriceRef}
+                          value={form.wholesale_price}
+                          onChange={(e) => setForm((f) => ({ ...f, wholesale_price: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && cgstRef.current?.focus()}
+                          helperText={`Auto ${formatCurrency(autoWholesalePrice)}`}
+                          InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                        />
+                      </Grid>
+                    </Grid>
+                    <Alert severity="success" icon={false}>
+                      Final wholesale price: <strong>{formatCurrency(form.wholesale_price || autoWholesalePrice)}</strong>
+                      {" "}per {form.purchase_unit}. Cost: <strong>{formatCurrency(form.wholesale_cost || autoWholesaleCost)}</strong>
+                    </Alert>
+                  </>
+                )}
+
+                <Grid container spacing={1}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      label="CGST %"
+                      type="number"
                       inputRef={cgstRef}
-                      onKeyDown={(e) => e.key === "Enter" && sgstRef.current?.focus()}
                       value={form.cgst}
                       onChange={(e) => setForm((f) => ({ ...f, cgst: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && sgstRef.current?.focus()}
+                      error={Boolean(errors.cgst)}
+                      helperText={errors.cgst}
                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
                     />
                   </Grid>
                   <Grid item xs={6}>
                     <TextField
-                      fullWidth label="SGST (%)" type="number"
+                      fullWidth
+                      label="SGST %"
+                      type="number"
                       inputRef={sgstRef}
-                      onKeyDown={(e) => e.key === "Enter" && stockRef.current?.focus()}
                       value={form.sgst}
                       onChange={(e) => setForm((f) => ({ ...f, sgst: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && (editId ? handleSubmit() : stockRef.current?.focus())}
+                      error={Boolean(errors.sgst)}
+                      helperText={errors.sgst}
                       InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
                     />
                   </Grid>
                 </Grid>
 
-                <TextField
-                  fullWidth label="Stock Quantity *" type="number"
-                  inputRef={stockRef}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  value={form.stock}
-                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-                  error={!!errors.stock} helperText={errors.stock}
-                />
+                {!editId && (
+                  <TextField
+                    fullWidth
+                    label="Opening Stock *"
+                    type="number"
+                    inputRef={stockRef}
+                    value={form.stock}
+                    onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                    error={Boolean(errors.stock)}
+                    helperText={errors.stock || `Tracked in ${form.unit}`}
+                  />
+                )}
 
                 <Stack spacing={1}>
-                  <Button fullWidth variant="contained" startIcon={editId ? null : <AddIcon />} onClick={handleSubmit} sx={{ py: 1.1 }}>
+                  <Button fullWidth variant="contained" startIcon={editId ? null : <AddIcon />} onClick={handleSubmit}>
                     {editId ? "Update Product" : "Add Product"}
                   </Button>
                   {editId && (
-                    <Button fullWidth variant="outlined" color="inherit" onClick={reset} sx={{ color: "text.secondary" }}>
+                    <Button fullWidth variant="outlined" color="inherit" onClick={resetProductForm}>
                       Cancel Edit
                     </Button>
                   )}
@@ -394,6 +604,7 @@ export default function ProductsPage() {
           </Card>
         </Grid>
       </Grid>
+
       <Toast
         open={toast.open}
         message={toast.message}

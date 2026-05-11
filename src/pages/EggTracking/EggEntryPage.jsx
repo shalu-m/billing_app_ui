@@ -6,6 +6,7 @@ import {
 } from "@mui/material";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import SaveIcon from "@mui/icons-material/Save";
+import EditIcon from "@mui/icons-material/Edit";
 import EggAltOutlinedIcon from "@mui/icons-material/EggAltOutlined";
 import { calcEggEntry, formatCurrency, formatDate } from "../../utils/helpers";
 import { Toast, ConfirmDialog } from "../../components/shared";
@@ -46,9 +47,12 @@ export default function EggEntryPage() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [entries, setEntries] = useState([]);
+  const today = new Date().toISOString().split("T")[0];
+  const isEditingToday = form.entry_date === today;
 
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
+  const formRef = useRef(null);
   const openingStockRef = useRef(null);
   const freshArrivalsRef = useRef(null);
   const eggsSoldRef = useRef(null);
@@ -103,6 +107,7 @@ export default function EggEntryPage() {
     try {
       await eggService.update(id, entry);
       setToast({ open: true, message: "Entry updated successfully!", severity: "success" });
+      setForm(EMPTY_FORM);
       setErrors({});
       laterstEnteries();
     } catch (error) {
@@ -118,12 +123,26 @@ export default function EggEntryPage() {
       }
       const res = await eggService.list(payload);
       setEntries(res.data);
-      const today = new Date().toISOString().split("T")[0];
-      const todayEntry = res.data.find(e => e.entry_date === today);
-      setForm(todayEntry || EMPTY_FORM);
+      // const today = new Date().toISOString().split("T")[0];
+      // const todayEntry = res.data.find(e => e.entry_date === today);
+      // setForm(todayEntry || EMPTY_FORM);
     } catch (error) {
       console.error("Failed to fetch egg entries");
     }
+  };
+
+  const handleEditEntry = (entry) => {
+    setForm(entry);
+    setErrors({});
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      openingStockRef.current?.focus();
+    }, 100);
+  };
+
+  const handleReset = () => {
+    setForm(EMPTY_FORM);
+    setErrors({});
   };
 
   const pcsAdorn = (pos) => <InputAdornment position={pos}><Typography variant="caption" color="text.secondary">pcs</Typography></InputAdornment>;
@@ -134,7 +153,7 @@ export default function EggEntryPage() {
       <Grid container spacing={2.5}>
         {/* ── Left: Entry Form ── */}
         <Grid item xs={12} lg={7}>
-          <Card>
+          <Card ref={formRef}>
             <CardContent>
               <Stack spacing={2.5}>
                 {/* Date */}
@@ -145,13 +164,20 @@ export default function EggEntryPage() {
                     value={form.entry_date}
                     onChange={setField("entry_date")}
                     error={!!errors.entry_date}
-                    helperText={errors.entry_date}
+                    helperText={errors.entry_date || ""}
+                    disabled={form.id !== undefined && !isEditingToday}
                     InputLabelProps={{ shrink: true }}
                     sx={{ maxWidth: 240 }}
                   />
                 </Box>
 
                 <Divider />
+
+                {!isEditingToday && form.id && (
+                  <Alert severity="info">
+                    You can only edit today's entry.
+                  </Alert>
+                )}
 
                 {/* Stock inputs */}
                 <Grid container spacing={1}>
@@ -163,6 +189,7 @@ export default function EggEntryPage() {
                       onKeyDown={(e) => e.key === "Enter" && freshArrivalsRef.current?.focus()}
                       value={form.opening_stock}
                       onChange={setField("opening_stock")}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: pcsAdorn("end") }}
                     />
                   </Grid>
@@ -174,6 +201,7 @@ export default function EggEntryPage() {
                       onKeyDown={(e) => e.key === "Enter" && eggsSoldRef.current?.focus()}
                       value={form.fresh_arrivals}
                       onChange={setField("fresh_arrivals")}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: pcsAdorn("end") }}
                     />
                   </Grid>
@@ -186,6 +214,7 @@ export default function EggEntryPage() {
                       value={form.eggs_sold}
                       onChange={setField("eggs_sold")}
                       error={!!errors.eggs_sold} helperText={errors.eggs_sold}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: pcsAdorn("end") }}
                     />
                   </Grid>
@@ -203,6 +232,7 @@ export default function EggEntryPage() {
                       onKeyDown={(e) => e.key === "Enter" && costPerEggRef.current?.focus()}
                       value={form.damaged_eggs}
                       onChange={setField("damaged_eggs")}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: pcsAdorn("end") }}            
                       sx={{ "& .MuiOutlinedInput-root": { borderColor: form.damaged_eggs > 0 ? "warning.main" : undefined } }}
                     />
@@ -222,6 +252,7 @@ export default function EggEntryPage() {
                       value={form.cost_per_egg}
                       onChange={setField("cost_per_egg")}
                       error={!!errors.cost_per_egg} helperText={errors.cost_per_egg}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: inrAdorn("end") }}
                     />
                   </Grid>
@@ -234,6 +265,7 @@ export default function EggEntryPage() {
                       value={form.selling_price}
                       onChange={setField("selling_price")}
                       error={!!errors.selling_price} helperText={errors.selling_price}
+                      disabled={!isEditingToday && form.id !== undefined}
                       InputProps={{ endAdornment: inrAdorn("end") }}
                     />
                   </Grid>
@@ -264,15 +296,26 @@ export default function EggEntryPage() {
                   </Alert>
                 )}
 
-                <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSave}
-                  sx={{ alignSelf: "flex-start", px: 4, py: 1.2, fontWeight: 700 }}
-                >
-                  {form.id ? "Update Entry" : "Save Entry"}
-                </Button>
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSave}
+                    disabled={!isEditingToday && form.id !== undefined}
+                    sx={{ px: 4, py: 1.2, fontWeight: 700 }}
+                  >
+                    {form.id ? "Update Entry" : "Save Entry"}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    onClick={handleReset}
+                    sx={{ px: 4, py: 1.2, fontWeight: 700 }}
+                  >
+                    Reset
+                  </Button>
+                </Stack>
               </Stack>
             </CardContent>
           </Card>
@@ -291,12 +334,14 @@ export default function EggEntryPage() {
                 </Box>
               ) : (
                 <Stack spacing={1.5}>
-                  {entries.slice(0, 7).map((e, i) => (
+                  {entries.slice(0, 7).map((e, i) => {
+                    const isToday = e.entry_date === today;
+                    return (
                     <Box key={e.id || i} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider", bgcolor: i === 0 ? "primary.50" : "background.paper" }}>
                       <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                         <Box>
                           <Typography variant="body2" fontWeight={700} color={i === 0 ? "primary.main" : "text.primary"}>
-                            {formatDate(e.entry_date)}
+                            {formatDate(e.entry_date)} {isToday && <Chip label="Today" size="small" variant="outlined" sx={{ ml: 1 }} />}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             Sold: {e.eggs_sold} pcs
@@ -304,14 +349,28 @@ export default function EggEntryPage() {
                           </Typography>
                         </Box>
                         <Box textAlign="right">
-                          <Typography variant="body2" fontWeight={800} color="success.main">
-                            {formatCurrency(e.profit)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">profit</Typography>
+                          <Stack spacing={0.5} alignItems="flex-end">
+                            <Typography variant="body2" fontWeight={800} color="success.main">
+                              {formatCurrency(e.profit)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">profit</Typography>
+                            {isToday && (
+                              <Button
+                                size="small"
+                                startIcon={<EditIcon />}
+                                color="primary"
+                                onClick={() => handleEditEntry(e)}
+                                sx={{ mt: 1 }}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                          </Stack>
                         </Box>
                       </Stack>
                     </Box>
-                  ))}
+                  );
+                  })}
                 </Stack>
               )}
             </CardContent>

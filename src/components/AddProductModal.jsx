@@ -13,7 +13,7 @@ import {
   FormControl,
   InputLabel
 } from "@mui/material";
-import { PRODUCT_UNITS } from "../data/mockData";
+import { useConfig } from "../hooks/useConfig";
 
 const EMPTY_PRODUCT = {
   productId: "",
@@ -27,6 +27,9 @@ const EMPTY_PRODUCT = {
 };
 
 export function AddProductModal({ open, onClose, onAdd, initialProduct = {} }) {
+  const { config } = useConfig();
+  const productUnits = config?.product_units || [];
+  
   const [product, setProduct] = useState(EMPTY_PRODUCT);
 
   // 🔥 Dynamic refs
@@ -127,7 +130,7 @@ export function AddProductModal({ open, onClose, onAdd, initialProduct = {} }) {
                   onChange={(e) => handleChange(field.key, e.target.value)}
                   onKeyDown={(e) => handleEnter(e, index)}
                 >
-                  {PRODUCT_UNITS.map((unit) => (
+                  {productUnits.map((unit) => (
                     <MenuItem key={unit} value={unit}>
                       {unit}
                     </MenuItem>

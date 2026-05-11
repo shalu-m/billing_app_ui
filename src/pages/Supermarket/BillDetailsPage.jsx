@@ -6,14 +6,19 @@ import {
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import PrintIcon from "@mui/icons-material/Print";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { formatCurrency, formatDateTime } from "../../utils/helpers";
-import { DataTable, PayChip } from "../../components/shared";
-import { SHOP_INFO } from "../../data/mockData";
+import { ConfirmDialog, DataTable, PayChip, Toast } from "../../components/shared";
+import { useConfig } from "../../hooks/useConfig";
 import { useReactToPrint } from "react-to-print";
 import BillSummaryPanel from "../../components/BillSummaryPanel";
 import { billService } from "../../api/services";
+import { useConfirm } from "../../hooks/useConfirm";
 
 export default function BillDetailsPage() {
+  const { config } = useConfig();
+  const shopInfo = config?.shop_info || {};
+  
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
 
@@ -23,15 +28,38 @@ export default function BillDetailsPage() {
   const [page, setPage] = useState(1);
   const [perPage] = useState(10);
   const [total, setTotal] = useState(0);
+  const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
   const printRef = useRef();
 
+  const { confirm, dialogProps } = useConfirm();
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
   });
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    console.log("selected" , selected);
+    
+    const confirmDelete = await confirm(
+      `Are you sure you want to delete Bill #${selected.bill_number}?\nThis action cannot be undone.`
+    );
+    
+    if (!confirmDelete) return;
+
+    try {
+      await billService.delete(selected.id);
+      setToast({ open: true, message: "Bill deleted successfully", severity: "success" });
+      setSelected(null);
+      fetchBills();
+    } catch (e) {
+      setToast({ open: true, message: `Failed to delete bill: ${e.message || "Unknown error"}`, severity: "error" });
+    }
+  };
 
   // ✅ FETCH API
   useEffect(() => {
@@ -67,21 +95,23 @@ export default function BillDetailsPage() {
       // ✅ MAP API → UI FORMAT
       const mapped = res.data.map((b) => ({
         ...b,
-        id: b.bill_number,
         customer: b.customer_name,
         method: b.payment_method,
         grandTotal: b.grand_total,
         datetime: b.created_at,
         sgst: b.total_sgst,
         cgst: b.total_cgst,
-        totalDiscount: b.total_discount
+        totalDiscount: b.total_discount,
+        totalProfit: b.total_profit
       }));
 
       setApiBills(mapped);
       setTotal(res.meta?.total || 0);
 
-      if (mapped.length > 0 && !selected) {
+      if (mapped.length > 0 && (!selected || !mapped.some((b) => b.id === selected.id))) {
         setSelected(mapped[0]);
+      } else if (mapped.length === 0) {
+        setSelected(null);
       }
 
     } catch (e) {
@@ -93,7 +123,7 @@ export default function BillDetailsPage() {
 
   const columns = [
     {
-      field: "id", label: "Bill ID",
+      field: "bill_number", label: "Bill ID",
       render: (v) => <Typography variant="body2" fontWeight={700} color="primary.main">{v}</Typography>,
     },
     { field: "customer", label: "Customer" },
@@ -228,12 +258,17 @@ export default function BillDetailsPage() {
                       <PrintIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton size="small" onClick={handleDelete} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }} color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Stack>
               )}
             </Stack>
 
             {selected ? (
-              <BillSummaryPanel bill={selected} shopInfo={SHOP_INFO} ref={printRef} />
+              <BillSummaryPanel bill={selected} shopInfo={shopInfo} ref={printRef} />
             ) : (
               <Card>
                 <CardContent sx={{ textAlign: "center", py: 6 }}>
@@ -244,6 +279,13 @@ export default function BillDetailsPage() {
           </Box>
         </Grid>
       </Grid>
+      <Toast
+        open={toast.open}
+        message={toast.message}
+        severity={toast.severity}
+        onClose={() => setToast((t) => ({ ...t, open: false }))}
+      />
+      <ConfirmDialog {...dialogProps} />
     </Box>
   );
 }

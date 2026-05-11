@@ -176,7 +176,9 @@ export default function SupermarketReportsPage() {
   // ✅ Prepare product performance data
   const productPerf = useMemo(() => {
     if (!billData?.sold_products) return [];
-    return billData.sold_products;
+    return [...billData.sold_products].sort(
+      (a, b) => Number(b.margin_percent || 0) - Number(a.margin_percent || 0)
+    );
   }, [billData]);
 
   // ✅ Client-side pagination
@@ -187,17 +189,41 @@ export default function SupermarketReportsPage() {
   const totalPages = Math.ceil(productPerf.length / perPage);
 
   const perfColumns = [
-    { field: "product_name", label: "Product Name", render: (v) => <Typography variant="body2" fontWeight={600}>{v}</Typography> },
-    { field: "qty_sold", label: "Qty Sold", align: "center" },
-    { field: "total_revenue", label: "Total Revenue", render: (v) => formatCurrency(v) },
-    { field: "profit_revenue", label: "Gross Profit", render: (v) => formatCurrency(v) },
+    { field: "product_name", label: "Product", render: (v) => <Typography variant="body2" fontWeight={600}>{v}</Typography> },
+    { 
+      field: "qty_sold", 
+      label: "Qty Sold", 
+      align: "center",
+      render: (_, row) => (
+        <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+          {(row.loose_qty > 0 || row.wholesale_qty > 0) && (
+            <Chip
+              label={[
+                row.loose_qty > 0 ? `Loose: ${row.loose_qty}` : "",
+                row.wholesale_qty > 0 ? `Wholesale: ${row.wholesale_qty}` : "",
+                row.base_qty_sold > 0 ? `Base: ${row.base_qty_sold}` : "",
+              ].filter(Boolean).join(" · ")}
+              size="small"
+              color="info"
+              variant="outlined"
+            />
+          )}
+        </Stack>
+      )
+    },
+    { field: "total_revenue", label: "Revenue (ex GST)", render: (v) => formatCurrency(v) },
+    {
+      field: "gross_profit",
+      label: "Gross Profit",
+      render: (_, row) => formatCurrency(row.gross_profit ?? row.profit_revenue),
+    },
     {
       field: "margin_percent", label: "Margin %", align: "center",
       render: (v) => (
         <Chip
-          label={`${v.toFixed(1)}%`}
+          label={`${Number(v || 0).toFixed(1)}%`}
           size="small"
-          color={v >= 15 ? "success" : v >= 8 ? "warning" : "error"}
+          color={Number(v || 0) >= 15 ? "success" : Number(v || 0) >= 8 ? "warning" : "error"}
           variant="outlined"
         />
       ),
@@ -254,7 +280,7 @@ export default function SupermarketReportsPage() {
       {billData && (
         <>
           <Grid container spacing={2} mb={2.5}>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={4}>
               <StatCard
                 label="Total Sales"
                 value={formatCurrency(billData.totals?.total_sales, 0)}
@@ -262,7 +288,7 @@ export default function SupermarketReportsPage() {
                 color="primary.main" bgcolor="primary.50"
               />
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={4}>
               <StatCard
                 label="Total Profit"
                 value={formatCurrency(billData.totals?.total_profit, 0)}
@@ -270,7 +296,7 @@ export default function SupermarketReportsPage() {
                 color="success.main" bgcolor="success.light"
               />
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={4}>
               <StatCard
                 label="Total Bills"
                 value={billData.totals?.total_bills}
@@ -334,9 +360,14 @@ export default function SupermarketReportsPage() {
             <Box sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
               <Stack direction="row" justifyContent="space-between">
                 <Typography variant="caption" color="text.secondary">{productPerf.length} products found</Typography>
-                <Typography variant="caption" fontWeight={700}>
-                  Total Revenue: {formatCurrency(productPerf.reduce((s, p) => s + (p.total_revenue || 0), 0))}
-                </Typography>
+                <Stack direction="row" spacing={2}>
+                  <Typography variant="caption" fontWeight={700}>
+                    Total Revenue: {formatCurrency(productPerf.reduce((s, p) => s + (p.total_revenue || 0), 0))}
+                  </Typography>
+                  <Typography variant="caption" fontWeight={700} color="success.main">
+                    Total Profit: {formatCurrency(productPerf.reduce((s, p) => s + (p.gross_profit ?? p.profit_revenue ?? 0), 0))}
+                  </Typography>
+                </Stack>
               </Stack>
             </Box>
           </>

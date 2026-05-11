@@ -25,6 +25,7 @@ import LoginPage from "./pages/LoginPage";
 // Pages
 import BillingPage from "./pages/Supermarket/BillingPage";
 import ProductsPage from "./pages/Supermarket/ProductsPage";
+import StockIntakePage from "./pages/Supermarket/StockIntakePage";
 import BillDetailsPage from "./pages/Supermarket/BillDetailsPage";
 import SupermarketReportsPage from "./pages/Supermarket/ReportsPage";
 import EggEntryPage from "./pages/EggTracking/EggEntryPage";
@@ -40,6 +41,10 @@ const PAGE_META = {
   products: {
     title: "Product Inventory",
     subtitle: "Manage, update and track products",
+  },
+  stock: {
+    title: "Stock Intake",
+    subtitle: "Track, add, edit and reverse supplier purchases",
   },
   billdetails: {
     title: "Bill Details",
@@ -108,6 +113,9 @@ export default function App() {
         return (
           <ProductsPage/>
         );
+
+      case "stock":
+        return <StockIntakePage/>;
 
       case "billdetails":
         return <BillDetailsPage/>;

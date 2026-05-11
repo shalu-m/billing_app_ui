@@ -10,7 +10,10 @@ const client = axios.create({
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    const errors = error.response?.data?.errors;
+    const firstError = errors ? Object.values(errors).flat()[0] : null;
     const msg =
+      firstError ||
       error.response?.data?.message ||
       error.response?.data?.error ||
       error.message ||
