@@ -2,6 +2,13 @@ import client from "./client";
 
 export const authService = {
   login: (credentials) => client.post("/auth/login", credentials).then((r) => r.data),
+  me: (token) =>
+    client
+      .get(
+        "/auth/me",
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+      )
+      .then((r) => r.data.user),
   logout: (token) =>
     client
       .post(

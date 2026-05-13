@@ -129,8 +129,11 @@ export default function EggReportsPage() {
         to: toDate,
       };
 
-      const res = await eggService.list(payload);
-      setEntries(res.data);
+      const res = await eggService.summary(payload);
+      const reportEntries = Array.isArray(res.entries)
+        ? res.entries
+        : res.entries?.data || [];
+      setEntries(reportEntries);
     } catch (error) {
       console.error("Failed to fetch egg entries");
       setError("Failed to fetch egg entries");

@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   AppBar,
@@ -12,12 +12,18 @@ import {
   Menu,
   MenuItem,
   CircularProgress,
+  Alert,
 } from "@mui/material";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import theme from "./theme/theme";
-import Sidebar from "./components/Sidebar";
+import Sidebar, {
+  getDefaultPageKey,
+  getDefaultShopKey,
+  getNavigationShops,
+  getShopPages,
+} from "./components/Sidebar";
 import { useAppState } from "./hooks/useAppState";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
@@ -64,14 +70,56 @@ const PAGE_META = {
   },
 };
 
+const PAGE_COMPONENTS = {
+  billing: <BillingPage />,
+  products: <ProductsPage />,
+  stock: <StockIntakePage />,
+  billdetails: <BillDetailsPage />,
+  reports: <SupermarketReportsPage />,
+  entry: <EggEntryPage />,
+  egreports: <EggReportsPage />,
+};
+
 export default function App() {
   const state = useAppState();
   const { user, logout, loading } = useAuth();
-  const [module, setModule] = useState("supermarket");
+  const [shop, setShop] = useState("supermarket");
   const [page, setPage] = useState("billing");
   const [anchorEl, setAnchorEl] = useState(null);
 
-  const meta = PAGE_META[page] || {};
+  const navigation = user?.navigation;
+  const shops = useMemo(() => getNavigationShops(navigation), [navigation]);
+  const defaultShop = useMemo(() => getDefaultShopKey(navigation), [navigation]);
+  const resolvedShop = shops.some((item) => item.key === shop)
+    ? shop
+    : defaultShop;
+  const allowedPages = useMemo(
+    () => getShopPages(resolvedShop, navigation),
+    [resolvedShop, navigation]
+  );
+  const resolvedPage = allowedPages.some((item) => item.key === page)
+    ? page
+    : getDefaultPageKey(resolvedShop, navigation) || page;
+  const activeShop = shops.find((item) => item.key === resolvedShop);
+  const activePage = allowedPages.find((item) => item.key === resolvedPage);
+  const activeShopLabel = activeShop?.label || "Shop";
+  const fallbackMeta = PAGE_META[resolvedPage] || {};
+  const meta = {
+    title: activePage?.title || fallbackMeta.title,
+    subtitle: activePage?.subtitle || fallbackMeta.subtitle,
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    if (resolvedShop !== shop) {
+      setShop(resolvedShop);
+    }
+
+    if (resolvedPage && resolvedPage !== page) {
+      setPage(resolvedPage);
+    }
+  }, [page, resolvedPage, resolvedShop, shop, user]);
 
   // 🔥 Show loading while checking auth
   if (loading) {
@@ -103,39 +151,18 @@ export default function App() {
   }
 
   const renderPage = () => {
-    switch (page) {
-      case "billing":
-        return (
-          <BillingPage/>
-        );
+    const canViewPage = allowedPages.some((item) => item.key === resolvedPage);
+    const PageComponent = PAGE_COMPONENTS[resolvedPage];
 
-      case "products":
-        return (
-          <ProductsPage/>
-        );
-
-      case "stock":
-        return <StockIntakePage/>;
-
-      case "billdetails":
-        return <BillDetailsPage/>;
-
-      case "reports":
-        return (
-          <SupermarketReportsPage/>
-        );
-
-      case "entry":
-        return (
-          <EggEntryPage/>
-        );
-
-      case "egreports":
-        return <EggReportsPage/>;
-
-      default:
-        return null;
+    if (!canViewPage || !PageComponent) {
+      return (
+        <Alert severity="warning">
+          You do not have permission to view this page.
+        </Alert>
+      );
     }
+
+    return PageComponent;
   };
 
   return (
@@ -147,11 +174,12 @@ export default function App() {
         
         {/* Sidebar */}
         <Sidebar
-          module={module}
-          setModule={setModule}
-          page={page}
+          shop={resolvedShop}
+          setShop={setShop}
+          page={resolvedPage}
           setPage={setPage}
-          shopName={state.shopName}
+          shopName={activeShop?.label || state.shopName}
+          navigation={navigation}
         />
 
         {/* Main Content */}
@@ -191,11 +219,7 @@ export default function App() {
               {/* Right Section */}
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Chip
-                  label={
-                    module === "supermarket"
-                      ? "Supermarket"
-                      : "Egg Tracking"
-                  }
+                  label={activeShopLabel}
                   size="small"
                   color="primary"
                   variant="outlined"
@@ -260,7 +284,7 @@ export default function App() {
               p: 2, // 🔥 Reduced padding (better layout)
               overflowY: "auto",
             }}
-            key={page}
+            key={resolvedPage}
           >
             {renderPage()}
           </Box>

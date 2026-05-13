@@ -9,25 +9,33 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if user is logged in (from localStorage) on mount
+  // Check if user is logged in and refresh navigation from the API on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
-    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    const restoreSession = async () => {
+      const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
 
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to restore user session");
+      if (!storedToken) {
         localStorage.removeItem(USER_STORAGE_KEY);
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setLoading(false);
+        return;
       }
-    } else {
-      localStorage.removeItem(USER_STORAGE_KEY);
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
 
-    setLoading(false);
+      try {
+        const userData = await authService.me(storedToken);
+        setUser(userData);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      } catch (e) {
+        console.error("Failed to restore user session");
+        setUser(null);
+        localStorage.removeItem(USER_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   const login = async (username, password) => {
