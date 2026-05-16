@@ -44,8 +44,11 @@ const BillSummaryPanel = forwardRef(({ bill, shopInfo }, ref) => {
       ref={ref}
       sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2.5, bgcolor: "background.paper" }}
     >
+      <Typography fontWeight={600} color="primary.main" textAlign="center">
+        {shopInfo.company_name}
+      </Typography>
       <Box textAlign="center" pb={2} mb={2} sx={{ borderBottom: "1.5px dashed", borderColor: "divider" }}>
-        <Typography variant="subtitle1" fontWeight={800} letterSpacing={2}>
+        <Typography variant="subtitle1" fontWeight={800} letterSpacing={1}>
           {shopInfo.name}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block">{shopInfo.address}</Typography>
