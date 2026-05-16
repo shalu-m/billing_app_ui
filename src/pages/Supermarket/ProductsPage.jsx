@@ -51,6 +51,26 @@ const EMPTY_PRODUCT_FORM = {
 const asNumberOrNull = (value) =>
   value === "" || value === null || value === undefined ? null : Number(value);
 
+const formatAmountInput = (value) => {
+  const rounded = Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  return String(rounded);
+};
+
+const getLooseCostFromWholesale = (wholesaleCost, purchaseQty) => {
+  if (wholesaleCost === "" || wholesaleCost === null || wholesaleCost === undefined) return "";
+
+  const cost = Number(wholesaleCost);
+  const qty = Number(purchaseQty);
+  if (!Number.isFinite(cost) || !Number.isFinite(qty) || qty <= 0) return "";
+
+  return formatAmountInput(cost / qty);
+};
+
+const withAutoLooseCost = (nextForm) => {
+  const looseCost = getLooseCostFromWholesale(nextForm.wholesale_cost, nextForm.purchase_qty);
+  return looseCost === "" ? nextForm : { ...nextForm, cost_price: looseCost };
+};
+
 const cleanProductPayload = (form, editing) => {
   const payload = {
     name: form.name.trim(),
@@ -168,8 +188,26 @@ export default function ProductsPage() {
 
   useEffect(() => {
     const handleKey = (e) => {
-      const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const isFormControl = (element) => {
+        if (!element || element === window) return false;
+
+        const tag = element.tagName;
+        const role = element.getAttribute?.("role");
+        const roleSelector = '[role="combobox"], [role="listbox"], [role="option"], [role="menuitem"]';
+
+        return (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          tag === "SELECT" ||
+          role === "combobox" ||
+          role === "listbox" ||
+          role === "option" ||
+          role === "menuitem" ||
+          Boolean(element.closest?.(`${roleSelector}, .MuiPopover-root, .MuiMenu-root`))
+        );
+      };
+
+      if (isFormControl(document.activeElement) || isFormControl(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
 
       if (e.key === "Enter") {
         const barcode = barcodeBufferRef.current.trim();
@@ -475,13 +513,15 @@ export default function ProductsPage() {
                       inputRef={purchaseUnitRef}
                       value={form.purchase_unit || ""}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          purchase_unit: e.target.value,
-                          purchase_qty: e.target.value ? f.purchase_qty : "",
-                          wholesale_cost: e.target.value ? f.wholesale_cost : "",
-                          wholesale_price: e.target.value ? f.wholesale_price : "",
-                        }))
+                        setForm((f) =>
+                          withAutoLooseCost({
+                            ...f,
+                            purchase_unit: e.target.value,
+                            purchase_qty: e.target.value ? f.purchase_qty : "",
+                            wholesale_cost: e.target.value ? f.wholesale_cost : "",
+                            wholesale_price: e.target.value ? f.wholesale_price : "",
+                          })
+                        )
                       }
                       onKeyDown={(e) => e.key === "Enter" && purchaseQtyRef.current?.focus()}
                     >
@@ -499,7 +539,9 @@ export default function ProductsPage() {
                       inputRef={purchaseQtyRef}
                       value={form.purchase_qty}
                       disabled={!form.purchase_unit}
-                      onChange={(e) => setForm((f) => ({ ...f, purchase_qty: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => withAutoLooseCost({ ...f, purchase_qty: e.target.value }))
+                      }
                       onKeyDown={(e) => e.key === "Enter" && wholesaleCostRef.current?.focus()}
                       error={Boolean(errors.purchase_qty)}
                       helperText={errors.purchase_qty || (form.purchase_unit ? `1 ${form.purchase_unit} = ? ${form.unit}` : "")}
@@ -517,9 +559,15 @@ export default function ProductsPage() {
                           type="number"
                           inputRef={wholesaleCostRef}
                           value={form.wholesale_cost}
-                          onChange={(e) => setForm((f) => ({ ...f, wholesale_cost: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((f) => withAutoLooseCost({ ...f, wholesale_cost: e.target.value }))
+                          }
                           onKeyDown={(e) => e.key === "Enter" && wholesalePriceRef.current?.focus()}
-                          helperText={`Auto ${formatCurrency(autoWholesaleCost)}`}
+                          helperText={
+                            form.purchase_qty && form.wholesale_cost !== ""
+                              ? `Cost Price ${formatCurrency(form.cost_price)}/${form.unit}`
+                              : `Auto ${formatCurrency(autoWholesaleCost)}`
+                          }
                           InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
                         />
                       </Grid>

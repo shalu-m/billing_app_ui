@@ -5,16 +5,21 @@ import {
   CardContent,
   TextField,
   Button,
+  IconButton,
+  InputAdornment,
   Typography,
   Stack,
   Alert,
   Container,
 } from "@mui/material";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -57,7 +62,7 @@ export default function LoginPage() {
             {/* Header */}
             <Stack spacing={3} textAlign="center" mb={3}>
               <Typography variant="h4" fontWeight={700} color="primary">
-                SUPERMARKET
+                Welcome
               </Typography>
             </Stack>
 
@@ -83,11 +88,25 @@ export default function LoginPage() {
               <TextField
                 fullWidth
                 label="Password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        edge="end"
+                        onClick={() => setShowPassword((value) => !value)}
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
 
               <Button

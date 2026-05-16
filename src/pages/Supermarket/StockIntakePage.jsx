@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -42,7 +43,9 @@ const EMPTY_FORM = {
 const normalizeCollection = (res) => (Array.isArray(res.data) ? res.data : res.data?.data || []);
 
 export default function StockIntakePage() {
-  const [products, setProducts] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productSearchInput, setProductSearchInput] = useState("");
   const [intakes, setIntakes] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [search, setSearch] = useState("");
@@ -53,6 +56,7 @@ export default function StockIntakePage() {
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -66,11 +70,6 @@ export default function StockIntakePage() {
   const supplierRef = useRef(null);
   const invoiceRef = useRef(null);
   const dateRef = useRef(null);
-
-  const selectedProduct = useMemo(
-    () => products.find((product) => product.id === Number(form.product_id)),
-    [products, form.product_id]
-  );
 
   const unitOptions = useMemo(() => {
     if (!selectedProduct) return ["kg"];
@@ -113,18 +112,50 @@ export default function StockIntakePage() {
     };
   }, [selectedProduct, form]);
 
-  const fetchProducts = useCallback(async () => {
-    try {
-      const res = await productService.list({
-        per_page: 300,
-        sort_by: "name",
-        sort_dir: "asc",
-      });
-      setProducts(normalizeCollection(res));
-    } catch (e) {
-      setToast({ open: true, message: e.message || "Failed to fetch products", severity: "error" });
+  useEffect(() => {
+    const term = productSearchInput.trim();
+
+    if (!term) {
+      setProductOptions(selectedProduct ? [selectedProduct] : []);
+      setLoadingProducts(false);
+      return undefined;
     }
-  }, []);
+
+    let ignore = false;
+    setLoadingProducts(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await productService.list({
+          search: term,
+          per_page: 10,
+          sort_by: "name",
+          sort_dir: "asc",
+        });
+
+        if (ignore) return;
+
+        const matches = normalizeCollection(res);
+        setProductOptions(
+          selectedProduct
+            ? [selectedProduct, ...matches.filter((product) => product.id !== selectedProduct.id)]
+            : matches
+        );
+      } catch (e) {
+        if (!ignore) {
+          setProductOptions(selectedProduct ? [selectedProduct] : []);
+          setToast({ open: true, message: e.message || "Failed to search products", severity: "error" });
+        }
+      } finally {
+        if (!ignore) setLoadingProducts(false);
+      }
+    }, 300);
+
+    return () => {
+      ignore = true;
+      clearTimeout(timer);
+    };
+  }, [productSearchInput, selectedProduct]);
 
   const fetchIntakes = useCallback(async () => {
     setLoading(true);
@@ -147,10 +178,6 @@ export default function StockIntakePage() {
       setLoading(false);
     }
   }, [page, search, filterProduct, fromDate, toDate]);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
 
   useEffect(() => {
     fetchIntakes();
@@ -178,6 +205,9 @@ export default function StockIntakePage() {
 
   const reset = () => {
     setForm(EMPTY_FORM);
+    setSelectedProduct(null);
+    setProductOptions([]);
+    setProductSearchInput("");
     setErrors({});
   };
 
@@ -204,7 +234,6 @@ export default function StockIntakePage() {
 
       reset();
       fetchIntakes();
-      fetchProducts();
     } catch (e) {
       setToast({ open: true, message: e.message || "Failed to save stock intake", severity: "error" });
     } finally {
@@ -220,19 +249,24 @@ export default function StockIntakePage() {
       await productService.deleteStockIntake(id);
       setToast({ open: true, message: "Stock intake deleted and stock reversed", severity: "info" });
       fetchIntakes();
-      fetchProducts();
     } catch (e) {
       setToast({ open: true, message: e.message || "Delete failed", severity: "error" });
     }
   };
 
-  const handleProductChange = (value) => {
-    const product = products.find((p) => p.id === Number(value));
+  const handleProductChange = (product) => {
+    setSelectedProduct(product || null);
+    setProductOptions(product ? [product] : []);
+    setProductSearchInput(product?.name || "");
     setForm((current) => ({
       ...current,
-      product_id: value,
+      product_id: product?.id || "",
       received_unit: product?.purchase_unit || product?.unit || "",
     }));
+
+    if (product) {
+      setTimeout(() => unitRef.current?.focus(), 0);
+    }
   };
 
   const resetFilters = () => {
@@ -356,22 +390,6 @@ export default function StockIntakePage() {
                     ),
                   }}
                 />
-                {/* <TextField
-                  select
-                  size="small"
-                  label="Product"
-                  value={filterProduct}
-                  onChange={(e) => {
-                    setFilterProduct(e.target.value);
-                    setPage(1);
-                  }}
-                  sx={{ minWidth: 180 }}
-                >
-                  <MenuItem value="">All products</MenuItem>
-                  {products.map((product) => (
-                    <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>
-                  ))}
-                </TextField> */}
                 <TextField
                   size="small"
                   type="date"
@@ -436,24 +454,61 @@ export default function StockIntakePage() {
               </Stack>
 
               <Stack spacing={2}>
-                <TextField
-                  select
+                <Autocomplete
                   fullWidth
-                  label="Product *"
-                  inputRef={productRef}
-                  value={form.product_id}
-                  onChange={(e) => handleProductChange(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && unitRef.current?.focus()}
-                  error={Boolean(errors.product_id)}
-                  helperText={errors.product_id}
-                >
-                  <MenuItem value="">Select product</MenuItem>
-                  {products.map((product) => (
-                    <MenuItem key={product.id} value={product.id}>
-                      {product.name} ({product.unit}{product.purchase_unit ? ` / ${product.purchase_unit}` : ""})
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  value={selectedProduct}
+                  inputValue={productSearchInput}
+                  options={productOptions}
+                  loading={loadingProducts}
+                  filterOptions={(options) => options}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  getOptionLabel={(option) =>
+                    option?.name
+                      ? `${option.name}${option.barcode ? ` (${option.barcode})` : ""}`
+                      : ""
+                  }
+                  noOptionsText={
+                    productSearchInput.trim() ? "No products found" : "Type to search products"
+                  }
+                  onInputChange={(_, value, reason) => {
+                    setProductSearchInput(value);
+
+                    if (reason === "input" && selectedProduct && value !== selectedProduct.name) {
+                      setSelectedProduct(null);
+                      setForm((current) => ({ ...current, product_id: "", received_unit: "" }));
+                    }
+                  }}
+                  onChange={(_, product) => handleProductChange(product)}
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id}>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" fontWeight={700}>{option.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.barcode || "No barcode"} - {option.unit}
+                          {option.purchase_unit ? ` / ${option.purchase_unit}` : ""}
+                        </Typography>
+                      </Stack>
+                    </li>
+                  )}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Product *"
+                      inputRef={productRef}
+                      error={Boolean(errors.product_id)}
+                      helperText={errors.product_id || "Type product name or barcode"}
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {loadingProducts ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                />
 
                 {selectedProduct && (
                   <Alert severity="info" icon={false}>

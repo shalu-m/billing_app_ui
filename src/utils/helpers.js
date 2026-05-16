@@ -78,7 +78,7 @@ export const calcItemTotals = (item) => {
   const base = Math.max(0, gross - discount);
   const sgstAmt = (toNumber(item.sgst ?? item.sgst_percent) / 100) * base;
   const cgstAmt = (toNumber(item.cgst ?? item.cgst_percent) / 100) * base;
-  const lineProfit = (pricing.unitPrice - pricing.costPrice) * qty - discount;
+  const lineProfit = pricing.costPrice ? parseFloat((pricing.unitPrice - pricing.costPrice) * qty - discount) : 0;
 
   return {
     base: parseFloat(base.toFixed(2)),
