@@ -22,6 +22,7 @@ import {
 // ── Constants ──────────────────────────────────────────────────────────────
 const EMPTY_FORM = { paymentMethod: "Cash", amountReceived: "", customerName: "" };
 const ADD_PRODUCT_OPTION = "__ADD_PRODUCT__";
+const CART_GRID_COLUMNS = "minmax(160px, 2fr) minmax(74px, 0.8fr) minmax(64px, 0.65fr) minmax(84px, 0.85fr) minmax(74px, 0.75fr) minmax(74px, 0.75fr) minmax(84px, 0.9fr) 40px";
 
 // ── Pure helpers (no state) ────────────────────────────────────────────────
 const normalizeCollection = (res) =>
@@ -424,15 +425,16 @@ export default function BillingPage() {
         {/* ── Left: Cart ── */}
         <Grid item xs={12} md={8}>
           <Card>
-            <CardContent sx={{ p: 0 }}>
+            <CardContent sx={{ p: 0, overflowX: "auto" }}>
 
               {/* Header */}
               <Box sx={{
                 display: "grid",
-                gridTemplateColumns: "2.25fr 1fr 0.8fr 0.9fr 0.9fr 1fr 40px",
+                gridTemplateColumns: CART_GRID_COLUMNS,
+                minWidth: 820,
                 gap: 1, px: 2, py: 1, bgcolor: "grey.100",
               }}>
-                {["Product", "Price", "Qty", "Discount", "GST", "Total", ""].map((h) => (
+                {["Product", "Price", "Qty", "Discount", "SGST", "CGST", "Total", ""].map((h) => (
                   <Typography key={h} variant="caption" fontWeight={700}
                     color="text.secondary" textTransform="uppercase">{h}</Typography>
                 ))}
@@ -483,7 +485,8 @@ export default function BillingPage() {
                     key={item.rowId}
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: "2.25fr 1fr 0.8fr 0.9fr 0.9fr 1fr 40px",
+                      gridTemplateColumns: CART_GRID_COLUMNS,
+                      minWidth: 820,
                       gap: 1, px: 2, py: 1, alignItems: "center",
                       borderTop: "1px solid", borderColor: "divider",
                     }}
@@ -562,13 +565,23 @@ export default function BillingPage() {
                       inputProps={{ min: 0, step: 0.01, inputMode: "decimal" }}
                     />
 
-                    {/* GST */}
+                    {/* SGST */}
                     <Stack spacing={0.25}>
                       <Typography variant="body2" fontWeight={700}>
-                        {formatCurrency(totals.sgstAmt + totals.cgstAmt)}
+                        {formatCurrency(totals.sgstAmt)}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {Number(item.sgst || 0) + Number(item.cgst || 0)}%
+                        {Number(item.sgst || 0)}%
+                      </Typography>
+                    </Stack>
+
+                    {/* CGST */}
+                    <Stack spacing={0.25}>
+                      <Typography variant="body2" fontWeight={700}>
+                        {formatCurrency(totals.cgstAmt)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {Number(item.cgst || 0)}%
                       </Typography>
                     </Stack>
 
@@ -680,8 +693,12 @@ export default function BillingPage() {
                   <Typography color="error">-{formatCurrency(summary.totalDiscount)}</Typography>
                 </Stack>
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography>GST</Typography>
-                  <Typography>{formatCurrency(summary.totalGST)}</Typography>
+                  <Typography>SGST</Typography>
+                  <Typography>{formatCurrency(summary.totalSGST)}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography>CGST</Typography>
+                  <Typography>{formatCurrency(summary.totalCGST)}</Typography>
                 </Stack>
                 <Divider />
                 <Stack direction="row" justifyContent="space-between" alignItems="center">

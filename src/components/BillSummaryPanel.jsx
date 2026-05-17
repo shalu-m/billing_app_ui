@@ -2,6 +2,8 @@ import React, { forwardRef } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import { formatCurrency, formatDateTime } from "../utils/helpers";
 
+const BILL_ITEM_GRID_COLUMNS = "1.6fr 0.55fr 0.55fr 0.8fr 0.7fr 0.7fr 0.7fr 0.9fr";
+
 const getItemAmounts = (item) => {
   const qty = Number(item.quantity ?? item.qty ?? 0);
   const price = Number(item.unit_price ?? item.unitPrice ?? 0);
@@ -20,7 +22,8 @@ const getItemAmounts = (item) => {
     qty,
     price,
     discount,
-    gst: sgst + cgst,
+    sgst,
+    cgst,
     total: Number(item.line_total ?? item.lineTotal ?? taxable + sgst + cgst),
     profit: item.line_profit ?? item.lineProfit,
   };
@@ -68,12 +71,12 @@ const BillSummaryPanel = forwardRef(({ bill, shopInfo }, ref) => {
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: "1.8fr 0.65fr 0.65fr 0.85fr 0.8fr 0.8fr 0.9fr",
-            gap: 0.75,
+            gridTemplateColumns: BILL_ITEM_GRID_COLUMNS,
+            gap: 0.5,
             mb: 1,
           }}
         >
-          {["Product", "Unit", "Qty", "Price", "Disc", "GST", "Total"].map((heading) => (
+          {["Product", "Unit", "Qty", "Price", "Disc", "SGST", "CGST", "Total"].map((heading) => (
             <Typography key={heading} variant="caption" fontWeight={700} color="text.secondary" textTransform="uppercase">
               {heading}
             </Typography>
@@ -87,8 +90,8 @@ const BillSummaryPanel = forwardRef(({ bill, shopInfo }, ref) => {
               key={item.id || index}
               sx={{
                 display: "grid",
-                gridTemplateColumns: "1.8fr 0.65fr 0.65fr 0.85fr 0.8fr 0.8fr 0.9fr",
-                gap: 0.75,
+                gridTemplateColumns: BILL_ITEM_GRID_COLUMNS,
+                gap: 0.5,
                 mb: 0.75,
                 alignItems: "start",
               }}
@@ -98,7 +101,8 @@ const BillSummaryPanel = forwardRef(({ bill, shopInfo }, ref) => {
               <Typography variant="caption">{amounts.qty}</Typography>
               <Typography variant="caption">{formatCurrency(amounts.price)}</Typography>
               <Typography variant="caption">{formatCurrency(amounts.discount)}</Typography>
-              <Typography variant="caption">{formatCurrency(amounts.gst)}</Typography>
+              <Typography variant="caption">{formatCurrency(amounts.sgst)}</Typography>
+              <Typography variant="caption">{formatCurrency(amounts.cgst)}</Typography>
               <Typography variant="caption" fontWeight={700}>{formatCurrency(amounts.total)}</Typography>
             </Box>
           );
