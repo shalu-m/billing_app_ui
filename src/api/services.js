@@ -49,6 +49,10 @@ export const billService = {
 };
 
 export const eggService = {
+  listIntakes: (params = {}) => client.get("/egg-intakes", { params }).then((r) => r.data),
+  createIntake: (data) => client.post("/egg-intakes", data).then((r) => r.data),
+  deleteIntake: (id) => client.delete(`/egg-intakes/${id}`).then((r) => r.data),
+  openingStock: (params = {}) => client.get("/egg-entries/opening-stock", { params }).then((r) => r.data),
   list: (params = {}) => client.get("/egg-entries", { params }).then((r) => r.data),
   get: (id) => client.get(`/egg-entries/${id}`).then((r) => r.data.data),
   create: (data) => client.post("/egg-entries", data).then((r) => r.data),

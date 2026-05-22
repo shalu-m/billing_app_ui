@@ -34,6 +34,7 @@ import ProductsPage from "./pages/Supermarket/ProductsPage";
 import StockIntakePage from "./pages/Supermarket/StockIntakePage";
 import BillDetailsPage from "./pages/Supermarket/BillDetailsPage";
 import SupermarketReportsPage from "./pages/Supermarket/ReportsPage";
+import EggIntakePage from "./pages/EggTracking/EggIntakePage";
 import EggEntryPage from "./pages/EggTracking/EggEntryPage";
 import EggReportsPage from "./pages/EggTracking/EggReportsPage";
 
@@ -64,6 +65,10 @@ const PAGE_META = {
     title: "Daily Egg Entry",
     subtitle: "Record daily egg stock and sales",
   },
+  intakes: {
+    title: "Egg Stock Intake",
+    subtitle: "Record Monday and Thursday stock purchases",
+  },
   egreports: {
     title: "Egg Reports",
     subtitle: "Egg tracking analytics and performance",
@@ -76,6 +81,7 @@ const PAGE_COMPONENTS = {
   stock: <StockIntakePage />,
   billdetails: <BillDetailsPage />,
   reports: <SupermarketReportsPage />,
+  intakes: <EggIntakePage />,
   entry: <EggEntryPage />,
   egreports: <EggReportsPage />,
 };
@@ -108,6 +114,30 @@ export default function App() {
     title: activePage?.title || fallbackMeta.title,
     subtitle: activePage?.subtitle || fallbackMeta.subtitle,
   };
+
+  useEffect(() => {
+    const handleNumberInputWheel = (event) => {
+      const target = event.target;
+
+      if (
+        target instanceof HTMLInputElement &&
+        target.type === "number" &&
+        document.activeElement === target
+      ) {
+        target.blur();
+      }
+    };
+
+    document.addEventListener("wheel", handleNumberInputWheel, {
+      capture: true,
+    });
+
+    return () => {
+      document.removeEventListener("wheel", handleNumberInputWheel, {
+        capture: true,
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) return;

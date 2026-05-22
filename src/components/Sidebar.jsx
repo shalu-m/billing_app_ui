@@ -26,6 +26,7 @@ const PAGE_ICONS = {
   stock: <LocalShippingOutlinedIcon fontSize="small" />,
   billdetails: <ListAltOutlinedIcon fontSize="small" />,
   reports: <BarChartOutlinedIcon fontSize="small" />,
+  intakes: <LocalShippingOutlinedIcon fontSize="small" />,
   entry: <AddCircleIcon fontSize="small" />,
   egreports: <ShowChartIcon fontSize="small" />,
 };

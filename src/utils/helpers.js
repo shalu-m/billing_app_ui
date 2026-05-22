@@ -8,13 +8,42 @@ export const formatCurrency = (value, decimals = 2) =>
     maximumFractionDigits: decimals,
   })}`;
 
+const parseDisplayDate = (dateStr) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  return new Date(dateStr);
+};
+
 export const formatDate = (dateStr) => {
   if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("en-IN", {
+  return parseDisplayDate(dateStr).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+};
+
+export const isWithinLastDays = (dateStr, days = 5) => {
+  if (!dateStr || days <= 0) return false;
+
+  const parsedDate = parseDisplayDate(dateStr);
+  if (Number.isNaN(parsedDate.getTime())) return false;
+
+  const recordDate = new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate()
+  );
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const firstAllowedDate = new Date(todayStart);
+
+  firstAllowedDate.setDate(todayStart.getDate() - (days - 1));
+
+  return recordDate >= firstAllowedDate && recordDate <= todayStart;
 };
 
 export const formatDateTime = (dateStr) => {
@@ -125,29 +154,93 @@ export const calcCartSummary = (cartItems) => {
   };
 };
 
+/**
+ * Calculate egg entry totals using FIFO method
+ * - Opening stock = previous closing + new intakes
+ * - Uses FIFO layers for accurate cost calculation
+ * - Profit = Revenue - (Cost calculated using FIFO method)
+ */
 export const calcEggEntry = ({
   opening_stock,
-  fresh_arrivals,
+  sale_lines = [],
   eggs_sold,
   damaged_eggs,
+  avg_cost_per_egg,
   cost_per_egg,
-  selling_price,
+  stock_layers = [],
 }) => {
   const os = toNumber(opening_stock);
-  const fa = toNumber(fresh_arrivals);
-  const sold = toNumber(eggs_sold);
-  const damaged = toNumber(damaged_eggs);
-  const cost = toNumber(cost_per_egg);
-  const sell = toNumber(selling_price);
 
-  const closingStock = Math.max(0, os + fa - sold - damaged);
-  const revenue = sold * sell;
-  const totalCost = (sold + damaged) * cost;
+  // Calculate line quantity from trays + loose eggs or direct quantity
+  const lineQuantity = (line) => {
+    const trays = toNumber(line.trays_sold);
+    const looseEggs = toNumber(line.loose_eggs_sold);
+    const eggsPerTray = toNumber(line.eggs_per_tray) || 30;
+
+    if (trays > 0 || looseEggs > 0) {
+      return Math.round((trays * eggsPerTray) + looseEggs);
+    }
+
+    return toNumber(line.quantity);
+  };
+
+  // Total eggs sold from all sale lines
+  const lineSold = sale_lines.reduce((sum, line) => sum + lineQuantity(line), 0);
+  const sold = lineSold || toNumber(eggs_sold);
+  const damaged = toNumber(damaged_eggs);
+
+  // Fallback cost per egg (used if no layers available)
+  const cost = toNumber(avg_cost_per_egg ?? cost_per_egg);
+
+  // Calculate total revenue
+  const revenue = sale_lines.reduce(
+    (sum, line) => sum + toNumber(line.price_per_egg) * lineQuantity(line),
+    0
+  );
+
+  /**
+   * Calculate total cost using FIFO method
+   * - Takes eggs from oldest stock first (layer by layer)
+   * - Each layer may have different cost per egg
+   * - If no layers, falls back to average cost
+   */
+  const fifoCost = (quantity) => {
+    if (!Array.isArray(stock_layers) || stock_layers.length === 0) {
+      return quantity * cost;
+    }
+
+    let remaining = quantity;
+    let total = 0;
+
+    stock_layers.forEach((layer) => {
+      if (remaining <= 0) return;
+      const available = toNumber(layer.quantity);
+      const taken = Math.min(available, remaining);
+      total += taken * toNumber(layer.cost_per_egg);
+      remaining -= taken;
+    });
+
+    return total;
+  };
+
+  // Calculate closing stock and profit
+  const closingStock = Math.max(0, os - sold - damaged);
+  // Cost includes both sold eggs AND damaged eggs (both removed from stock)
+  const totalCost = fifoCost(sold + damaged);
   const profit = revenue - totalCost;
+  console.log("Egg Entry Calculation:", {
+    sold,
+    damaged,
+    revenue,
+    totalCost,
+    profit,
+  });
 
   return {
+    totalSold: sold,
     closingStock,
     revenue: parseFloat(revenue.toFixed(2)),
+    totalCost: parseFloat(totalCost.toFixed(2)),
     profit: parseFloat(profit.toFixed(2)),
   };
 };
