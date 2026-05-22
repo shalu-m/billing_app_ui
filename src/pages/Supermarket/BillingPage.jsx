@@ -11,7 +11,7 @@ import { useReactToPrint } from "react-to-print";
 
 import { billService, productService } from "../../api/services";
 import { AddProductModal }  from "../../components/AddProductModal";
-import BillSummaryPanel     from "../../components/BillSummaryPanel";
+import BillSummaryPanel, { receiptPrintPageStyle } from "../../components/BillSummaryPanel";
 import { Toast }            from "../../components/shared";
 import { useConfig }        from "../../hooks/useConfig";
 import {
@@ -158,6 +158,7 @@ export default function BillingPage() {
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
+    pageStyle: receiptPrintPageStyle,
     onAfterPrint: () => { setPendingBill(null); clearCart(); },
   });
 

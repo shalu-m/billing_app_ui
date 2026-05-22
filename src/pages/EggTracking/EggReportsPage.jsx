@@ -244,9 +244,6 @@ export default function EggReportsPage() {
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
                 <Stack direction="row" justifyContent="space-between" flexWrap="wrap" useFlexGap>
                   <Typography variant="caption" color="text.secondary">{entries.length} entries found</Typography>
-                  <Typography variant="caption" fontWeight={800}>
-                    Total Damaged: {stats.damaged.toLocaleString("en-IN")}
-                  </Typography>
                 </Stack>
               </Box>
             )}

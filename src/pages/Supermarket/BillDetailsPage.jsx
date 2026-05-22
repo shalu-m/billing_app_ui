@@ -11,7 +11,7 @@ import { formatCurrency, formatDateTime } from "../../utils/helpers";
 import { ConfirmDialog, DataTable, PayChip, Toast } from "../../components/shared";
 import { useConfig } from "../../hooks/useConfig";
 import { useReactToPrint } from "react-to-print";
-import BillSummaryPanel from "../../components/BillSummaryPanel";
+import BillSummaryPanel, { receiptPrintPageStyle } from "../../components/BillSummaryPanel";
 import { billService } from "../../api/services";
 import { useConfirm } from "../../hooks/useConfirm";
 
@@ -39,11 +39,11 @@ export default function BillDetailsPage() {
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
+    pageStyle: receiptPrintPageStyle,
   });
 
   const handleDelete = async () => {
     if (!selected) return;
-    console.log("selected" , selected);
     
     const confirmDelete = await confirm(
       `Are you sure you want to delete Bill #${selected.bill_number}?\nThis action cannot be undone.`
@@ -145,7 +145,7 @@ export default function BillDetailsPage() {
     <Box>
       <Grid container spacing={2.5}>
         {/* ── Left: Bill List ── */}
-        <Grid item xs={12} lg={7}>
+        <Grid item xs={12} lg={8}>
           <Card>
             <CardContent>
               <Stack direction="row" spacing={1.5} mb={2} flexWrap="wrap" useFlexGap>
@@ -247,11 +247,10 @@ export default function BillDetailsPage() {
         </Grid>
 
         {/* ── Right: Bill Summary ── */}
-        <Grid item xs={12} lg={5}>
-          <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-              <Typography variant="subtitle1" fontWeight={700}>Bill Summary</Typography>
-              {selected && (
+        <Grid item xs={12} lg={4}>
+          <Box sx={{ maxWidth: 360, mx: "auto" }}>
+            {selected && (
+              <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={1}>
                 <Stack direction="row" spacing={1}>
                   <Tooltip title="Print">
                     <IconButton size="small" onClick={handlePrint} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
@@ -264,14 +263,14 @@ export default function BillDetailsPage() {
                     </IconButton>
                   </Tooltip>
                 </Stack>
-              )}
-            </Stack>
+              </Stack>
+            )}
 
             {selected ? (
               <BillSummaryPanel bill={selected} shopInfo={shopInfo} ref={printRef} />
             ) : (
               <Card>
-                <CardContent sx={{ textAlign: "center", py: 6 }}>
+                <CardContent sx={{ textAlign: "center", py: 5 }}>
                   <Typography color="text.secondary" variant="body2">Select a bill to view details</Typography>
                 </CardContent>
               </Card>
