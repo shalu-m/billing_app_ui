@@ -228,13 +228,6 @@ export const calcEggEntry = ({
   // Cost includes both sold eggs AND damaged eggs (both removed from stock)
   const totalCost = fifoCost(sold + damaged);
   const profit = revenue - totalCost;
-  console.log("Egg Entry Calculation:", {
-    sold,
-    damaged,
-    revenue,
-    totalCost,
-    profit,
-  });
 
   return {
     totalSold: sold,

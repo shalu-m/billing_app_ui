@@ -89,8 +89,8 @@ const PAGE_COMPONENTS = {
 export default function App() {
   const state = useAppState();
   const { user, logout, loading } = useAuth();
-  const [shop, setShop] = useState("supermarket");
-  const [page, setPage] = useState("billing");
+  const [shop, setShop] = useState("");
+  const [page, setPage] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
 
   const navigation = user?.navigation;

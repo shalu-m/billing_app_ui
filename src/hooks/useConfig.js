@@ -24,7 +24,6 @@ export const useConfig = () => {
       try {
         setLoading(true);
         const data = await configService.getConfig();
-        console.log("Fetched config:", data);
         configCache = data;
         setConfig(data);
         setError(null);
