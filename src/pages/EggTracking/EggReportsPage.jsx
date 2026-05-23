@@ -145,22 +145,6 @@ export default function EggReportsPage() {
         );
       },
     },
-    {
-      field: "sale_lines",
-      label: "Sale Lines",
-      render: (value) => (
-        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-          {(value || []).map((line, index) => (
-            <Chip
-              key={line.id || index}
-              size="small"
-              variant="outlined"
-              label={`${Number(line.trays_sold || 0).toLocaleString("en-IN")} trays + ${Number(line.loose_eggs_sold || 0).toLocaleString("en-IN")} eggs @ ${formatCurrency(line.price ?? line.price_per_egg)}`}
-            />
-          ))}
-        </Stack>
-      ),
-    },
   ];
 
   return (

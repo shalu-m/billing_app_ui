@@ -161,7 +161,22 @@ export default function EggIntakePage() {
   };
 
   const intakeColumns = [
-    { field: "intake_date", label: "Date", render: (value) => <Typography variant="body2" fontWeight={700}>{formatDate(value)}</Typography> },
+    {
+      field: "intake_date",
+      label: "Date",
+      align: "center",
+      minWidth: 112,
+      cellSx: { whiteSpace: "nowrap" },
+      render: (value) => (
+        <Typography
+          variant="body2"
+          fontWeight={700}
+          sx={{ display: "inline-block", minWidth: 92, textAlign: "center", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
+        >
+          {formatDate(value)}
+        </Typography>
+      ),
+    },
     { field: "trays_received", label: "Trays", render: (value) => Number(value).toLocaleString("en-IN") },
     { field: "loose_eggs_received", label: "Loose Eggs", render: (value) => Number(value || 0).toLocaleString("en-IN") },
     { field: "eggs_per_tray", label: "Eggs/Tray" },
@@ -364,5 +379,4 @@ export default function EggIntakePage() {
     </Box>
   );
 }
-
 

@@ -7,6 +7,10 @@ import {
   CardContent,
   Chip,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   IconButton,
@@ -122,10 +126,102 @@ function normalizeEntry(entry) {
   };
 }
 
+const getSaleLines = (entry) => Array.isArray(entry?.sale_lines) ? entry.sale_lines : [];
+const getLinePrice = (line) => toNumber(line.price_per_egg ?? line.price);
+const getLineQty = (line) => toNumber(line.quantity ?? line.qty);
+const getLineAmount = (line) => toNumber(line.total_amount ?? line.amount ?? getLinePrice(line) * getLineQty(line));
+
+function SaleLinesSummary({ lines, onClick }) {
+  const count = lines.length;
+
+  return (
+    <Tooltip title={count > 0 ? "View sale lines" : "No sale lines"}>
+      <span>
+        <Button
+          size="small"
+          variant="text"
+          disabled={count === 0}
+          onClick={onClick}
+          sx={{ minWidth: 32, px: 1, fontWeight: 800 }}
+        >
+          {count}
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
+function SaleLinesDetail({ entry, showTitle = true, maxHeight = 260 }) {
+  const lines = getSaleLines(entry);
+
+  if (!entry || !lines.length) {
+    return <Typography variant="body2" color="text.secondary">No sale lines for this entry.</Typography>;
+  }
+
+  return (
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "grey.50", p: 1.25 }}>
+      {showTitle && (
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+          <Typography variant="body2" fontWeight={800}>
+            Sale Lines - {formatDate(entry.entry_date)}
+          </Typography>
+          <Chip size="small" variant="outlined" label={`${lines.length} ${lines.length === 1 ? "line" : "lines"}`} />
+        </Stack>
+      )}
+
+      <Box sx={{ maxHeight, overflow: "auto", border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "background.paper" }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "minmax(80px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr)",
+            gap: 1,
+            px: 1,
+            py: 0.75,
+            bgcolor: "grey.100",
+            borderBottom: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          {["Rate", "Trays + Eggs", "Total Eggs", "Amount"].map((heading) => (
+            <Typography key={heading} variant="caption" fontWeight={800} color="text.secondary">
+              {heading}
+            </Typography>
+          ))}
+        </Box>
+
+        {lines.map((line, index) => (
+          <Box
+            key={line.id || index}
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "minmax(80px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr) minmax(90px, 1fr)",
+              gap: 1,
+              px: 1,
+              py: 0.75,
+              borderTop: index === 0 ? 0 : "1px solid",
+              borderColor: "divider",
+              alignItems: "center",
+            }}
+          >
+            <Typography variant="caption" fontWeight={700}>{formatCurrency(getLinePrice(line))}</Typography>
+            <Typography variant="caption">
+              {Number(line.trays_sold || 0).toLocaleString("en-IN")} trays + {Number(line.loose_eggs_sold || 0).toLocaleString("en-IN")} eggs
+            </Typography>
+            <Typography variant="caption">{getLineQty(line).toLocaleString("en-IN")}</Typography>
+            <Typography variant="caption" fontWeight={800}>{formatCurrency(getLineAmount(line))}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
 export default function EggEntryPage() {
   const [form, setForm] = useState(emptyForm());
   const [entries, setEntries] = useState([]);
   const [selectedEntry, setSelectedEntry] = useState(null);
+  const [saleLinesEntry, setSaleLinesEntry] = useState(null);
+  const [historyFilters, setHistoryFilters] = useState({ from: "", to: "" });
   const [errors, setErrors] = useState({});
   const [openingLoading, setOpeningLoading] = useState(false);
   const [entriesLoading, setEntriesLoading] = useState(false);
@@ -199,16 +295,24 @@ export default function EggEntryPage() {
   const loadEntries = useCallback(async () => {
     try {
       setEntriesLoading(true);
-      const res = await eggService.list({ page: 1, per_page: 20 });
+      const hasDateFilter = Boolean(historyFilters.from || historyFilters.to);
+      const params = hasDateFilter
+        ? {
+          from: historyFilters.from || undefined,
+          to: historyFilters.to || undefined,
+        }
+        : { page: 1, per_page: 20 };
+      const res = await eggService.list(params);
       const rows = res.data || [];
       setEntries(rows);
-      setSelectedEntry((current) => current || rows[0] || null);
+      setSelectedEntry((current) => rows.find((row) => row.id === current?.id) || rows[0] || null);
+      setSaleLinesEntry((current) => rows.find((row) => row.id === current?.id) || null);
     } catch (error) {
       setToast({ open: true, message: "Failed to load egg entries.", severity: "error" });
     } finally {
       setEntriesLoading(false);
     }
-  }, []);
+  }, [historyFilters.from, historyFilters.to]);
 
   useEffect(() => {
     loadEntries();
@@ -317,6 +421,7 @@ export default function EggEntryPage() {
       await eggService.delete(entry.id);
       setToast({ open: true, message: "Egg entry deleted.", severity: "success" });
       if (selectedEntry?.id === entry.id) setSelectedEntry(null);
+      if (saleLinesEntry?.id === entry.id) setSaleLinesEntry(null);
       loadEntries();
       resetForm();
     } catch (error) {
@@ -329,10 +434,40 @@ export default function EggEntryPage() {
   };
 
   const entryColumns = [
-    { field: "entry_date", label: "Date", render: (value) => <Typography variant="body2" fontWeight={700}>{formatDate(value)}</Typography> },
+    {
+      field: "entry_date",
+      label: "Date",
+      align: "center",
+      minWidth: 112,
+      cellSx: { whiteSpace: "nowrap" },
+      render: (value) => (
+        <Typography
+          variant="body2"
+          fontWeight={700}
+          sx={{ display: "inline-block", minWidth: 92, textAlign: "center", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
+        >
+          {formatDate(value)}
+        </Typography>
+      ),
+    },
     { field: "opening_stock", label: "Opening", render: (value) => Number(value).toLocaleString("en-IN") },
     { field: "new_stock_today", label: "New Stock", render: (value) => Number(value).toLocaleString("en-IN") },
     { field: "total_eggs_sold", label: "Sold", render: (value, row) => Number(value ?? row.eggs_sold).toLocaleString("en-IN") },
+    {
+      field: "sale_lines",
+      label: "Sale Lines",
+      align: "center",
+      render: (value, row) => (
+        <SaleLinesSummary
+          lines={Array.isArray(value) ? value : []}
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedEntry(row);
+            setSaleLinesEntry(row);
+          }}
+        />
+      ),
+    },
     {
       field: "damaged_eggs",
       label: "Damaged",
@@ -393,6 +528,7 @@ export default function EggEntryPage() {
       },
     },
   ];
+  const saleLinesDialogCount = getSaleLines(saleLinesEntry).length;
 
   return (
     <Box>
@@ -406,6 +542,30 @@ export default function EggEntryPage() {
                   {entriesLoading && <Typography variant="caption" color="text.secondary">Loading...</Typography>}
                 </Stack>
 
+                <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+                  <TextField
+                    label="From"
+                    type="date"
+                    size="small"
+                    value={historyFilters.from}
+                    onChange={(event) => setHistoryFilters((current) => ({ ...current, from: event.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 150 }}
+                  />
+                  <TextField
+                    label="To"
+                    type="date"
+                    size="small"
+                    value={historyFilters.to}
+                    onChange={(event) => setHistoryFilters((current) => ({ ...current, to: event.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 150 }}
+                  />
+                  <Button variant="outlined" onClick={() => setHistoryFilters({ from: "", to: "" })}>
+                    Reset
+                  </Button>
+                </Stack>
+
                 <DataTable
                   columns={entryColumns}
                   rows={entries}
@@ -413,6 +573,14 @@ export default function EggEntryPage() {
                   selectedId={selectedEntry?.id}
                   emptyMessage="No egg entries yet."
                 />
+
+                <Box sx={{ pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {historyFilters.from || historyFilters.to
+                      ? `${entries.length} entries found`
+                      : `${entries.length} latest entries shown`}
+                  </Typography>
+                </Box>
               </Stack>
             </CardContent>
           </Card>
@@ -652,6 +820,35 @@ export default function EggEntryPage() {
           </Card>
         </Grid>
       </Grid>
+
+      <Dialog
+        open={Boolean(saleLinesEntry)}
+        onClose={() => setSaleLinesEntry(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800}>Sale Lines</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {saleLinesEntry ? formatDate(saleLinesEntry.entry_date) : ""}
+              </Typography>
+            </Box>
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${saleLinesDialogCount} ${saleLinesDialogCount === 1 ? "line" : "lines"}`}
+            />
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers>
+          <SaleLinesDetail entry={saleLinesEntry} showTitle={false} maxHeight={360} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaleLinesEntry(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       <Toast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((current) => ({ ...current, open: false }))} />
       <ConfirmDialog {...dialogProps} />

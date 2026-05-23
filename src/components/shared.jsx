@@ -53,7 +53,17 @@ export function DataTable({ columns, rows, onRowClick, emptyMessage = "No data a
         <TableHead>
           <TableRow>
             {columns.map((col) => (
-              <TableCell key={col.field} align={col.align || "left"} sx={{ whiteSpace: "nowrap" }}>
+              <TableCell
+                key={col.field}
+                align={col.align || "left"}
+                sx={{
+                  whiteSpace: "nowrap",
+                  width: col.width,
+                  minWidth: col.minWidth,
+                  maxWidth: col.maxWidth,
+                  ...col.headerSx,
+                }}
+              >
                 {col.label}
               </TableCell>
             ))}
@@ -78,7 +88,17 @@ export function DataTable({ columns, rows, onRowClick, emptyMessage = "No data a
                 }}
               >
                 {columns.map((col) => (
-                  <TableCell key={col.field} align={col.align || "left"} sx={{ py: 1.25 }}>
+                  <TableCell
+                    key={col.field}
+                    align={col.align || "left"}
+                    sx={{
+                      py: 1.25,
+                      width: col.width,
+                      minWidth: col.minWidth,
+                      maxWidth: col.maxWidth,
+                      ...col.cellSx,
+                    }}
+                  >
                     {col.render ? col.render(row[col.field], row) : row[col.field]}
                   </TableCell>
                 ))}
@@ -134,4 +154,3 @@ export function ConfirmDialog({ open, message, onConfirm, onCancel, confirmText 
     </Dialog>
   );
 }
-
