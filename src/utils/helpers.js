@@ -155,10 +155,14 @@ export const calcCartSummary = (cartItems) => {
 };
 
 /**
- * Calculate egg entry totals using FIFO method
- * - Opening stock = previous closing + new intakes
- * - Uses FIFO layers for accurate cost calculation
- * - Profit = Revenue - (Cost calculated using FIFO method)
+ * Calculate egg entry totals using FIFO method with dual-bucket free/purchased logic.
+ *
+ * Rules:
+ *  - Damaged eggs absorb free eggs first (no cost). Only excess damages reduce profit.
+ *  - Sold eggs consume purchased eggs first (cost charged), then free eggs (no cost).
+ *  - Falls back to simple average cost if no stock_layers provided.
+ *
+ * NOTE: stock_layers from the API now return { purchased_qty, free_qty, cost_per_egg }.
  */
 export const calcEggEntry = ({
   opening_stock,
@@ -190,7 +194,7 @@ export const calcEggEntry = ({
   const damaged = toNumber(damaged_eggs);
 
   // Fallback cost per egg (used if no layers available)
-  const cost = toNumber(avg_cost_per_egg ?? cost_per_egg);
+  const fallbackCost = toNumber(avg_cost_per_egg ?? cost_per_egg);
 
   // Calculate total revenue
   const revenue = sale_lines.reduce(
@@ -198,35 +202,75 @@ export const calcEggEntry = ({
     0
   );
 
-  /**
-   * Calculate total cost using FIFO method
-   * - Takes eggs from oldest stock first (layer by layer)
-   * - Each layer may have different cost per egg
-   * - If no layers, falls back to average cost
-   */
-  const fifoCost = (quantity) => {
-    if (!Array.isArray(stock_layers) || stock_layers.length === 0) {
-      return quantity * cost;
-    }
+  const closingStock = Math.max(0, os - sold - damaged);
 
-    let remaining = quantity;
-    let total = 0;
+  // Simple fallback when layers haven't been loaded yet
+  if (!Array.isArray(stock_layers) || stock_layers.length === 0) {
+    const totalCost = (sold + damaged) * fallbackCost;
+    const profit = revenue - totalCost;
+    return {
+      totalSold: sold,
+      closingStock,
+      revenue: parseFloat(revenue.toFixed(2)),
+      totalCost: parseFloat(totalCost.toFixed(2)),
+      profit: parseFloat(profit.toFixed(2)),
+    };
+  }
 
-    stock_layers.forEach((layer) => {
-      if (remaining <= 0) return;
-      const available = toNumber(layer.quantity);
-      const taken = Math.min(available, remaining);
-      total += taken * toNumber(layer.cost_per_egg);
+  // Deep-clone layers so we don't mutate the original React state
+  const layers = stock_layers.map((l) => ({
+    purchased_qty: toNumber(l.purchased_qty),
+    free_qty: toNumber(l.free_qty),
+    cost_per_egg: toNumber(l.cost_per_egg),
+  }));
+
+  // Helper: consume N free eggs from layers (FIFO), no cost charged
+  const consumeFree = (qty) => {
+    let remaining = qty;
+    for (const layer of layers) {
+      if (remaining <= 0) break;
+      const taken = Math.min(layer.free_qty, remaining);
+      layer.free_qty -= taken;
       remaining -= taken;
-    });
-
-    return total;
+    }
   };
 
-  // Calculate closing stock and profit
-  const closingStock = Math.max(0, os - sold - damaged);
-  // Cost includes both sold eggs AND damaged eggs (both removed from stock)
-  const totalCost = fifoCost(sold + damaged);
+  // Helper: consume N eggs preferring purchased (FIFO), spills into free of same layer.
+  // Returns the cost for purchased portion only.
+  const consumePurchased = (qty) => {
+    let remaining = qty;
+    let layerCost = 0;
+    for (const layer of layers) {
+      if (remaining <= 0) break;
+      // Charge cost only for purchased eggs
+      if (layer.purchased_qty > 0) {
+        const taken = Math.min(layer.purchased_qty, remaining);
+        layerCost += taken * layer.cost_per_egg;
+        layer.purchased_qty -= taken;
+        remaining -= taken;
+      }
+      // Spill into free eggs of this layer (zero additional cost)
+      if (remaining > 0 && layer.free_qty > 0) {
+        const taken = Math.min(layer.free_qty, remaining);
+        layer.free_qty -= taken;
+        remaining -= taken;
+      }
+    }
+    return layerCost;
+  };
+
+  // Step 1: absorb damaged eggs — free eggs first, then purchased
+  const totalFreeAvailable = layers.reduce((sum, l) => sum + l.free_qty, 0);
+  const damagedFromFree = Math.min(damaged, totalFreeAvailable);
+  const damagedFromPurchased = Math.max(0, damaged - damagedFromFree);
+
+  if (damagedFromFree > 0) consumeFree(damagedFromFree);
+  const damageCost = damagedFromPurchased > 0 ? consumePurchased(damagedFromPurchased) : 0;
+
+  // Step 2: cost for sold eggs (purchased first, then free)
+  const saleCost = consumePurchased(sold);
+
+  const totalCost = saleCost + damageCost;
   const profit = revenue - totalCost;
 
   return {

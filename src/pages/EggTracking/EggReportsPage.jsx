@@ -66,14 +66,12 @@ export default function EggReportsPage() {
     const money = summary?.money || {};
 
     return {
-      eggsBought: Number(stock.total_eggs_bought || 0),
-      eggsSold: Number(stock.total_eggs_sold || 0),
-      damaged: Number(stock.total_damaged || 0),
-      closingStock: Number(stock.closing_stock || 0),
       investment: Number(money.total_investment || 0),
       revenue: Number(money.total_revenue || 0),
       profit: Number(money.gross_profit || 0),
-      avgProfitPerEgg: Number(money.avg_profit_per_egg || 0),
+      eggsBought: Number(stock.total_eggs_bought || 0),
+      eggsSold: Number(stock.total_eggs_sold || 0),
+      damaged: Number(stock.total_damaged || 0),
     };
   }, [summary]);
 
@@ -175,29 +173,23 @@ export default function EggReportsPage() {
       {loading && <Typography variant="caption" color="text.secondary">Loading...</Typography>}
 
       <Grid container spacing={2} mb={2.5}>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Investment" value={formatCurrency(stats.investment, 0)} icon={<AccountBalanceWalletIcon fontSize="small" />} color="primary.main" bgcolor="primary.50" />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Revenue" value={formatCurrency(stats.revenue, 0)} icon={<PaidOutlinedIcon fontSize="small" />} color="success.main" bgcolor="success.light" />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Gross Profit" value={formatCurrency(stats.profit, 0)} icon={<TrendingUpIcon fontSize="small" />} color="secondary.main" bgcolor="secondary.50" />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Avg Profit/Egg" value={formatCurrency(stats.avgProfitPerEgg)} icon={<EggOutlinedIcon fontSize="small" />} color="warning.main" bgcolor="warning.light" />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Eggs Bought" value={stats.eggsBought.toLocaleString("en-IN")} icon={<EggOutlinedIcon fontSize="small" />} color="success.main" bgcolor="success.light" />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Eggs Sold" value={stats.eggsSold.toLocaleString("en-IN")} icon={<EggOutlinedIcon fontSize="small" />} color="secondary.main" bgcolor="secondary.50" />
         </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
+        <Grid item xs={12} sm={6} lg={4}>
           <StatCard label="Damaged Eggs" value={stats.damaged.toLocaleString("en-IN")} icon={<WarningAmberIcon fontSize="small" />} color="error.main" bgcolor="error.light" />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Closing Stock" value={stats.closingStock.toLocaleString("en-IN")} icon={<WarningAmberIcon fontSize="small" />} color="warning.main" bgcolor="warning.light" />
         </Grid>
       </Grid>
 

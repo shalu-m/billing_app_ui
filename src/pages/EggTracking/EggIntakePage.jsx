@@ -5,6 +5,8 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
+  Divider,
   Grid,
   InputAdornment,
   Stack,
@@ -12,11 +14,12 @@ import {
   Typography,
 } from "@mui/material";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
+import CardGiftcardOutlinedIcon from "@mui/icons-material/CardGiftcardOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EggOutlinedIcon from "@mui/icons-material/EggOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import ScaleOutlinedIcon from "@mui/icons-material/ScaleOutlined";
+import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import { eggService } from "../../api/services";
 import { Toast, ConfirmDialog, DataTable, StatCard } from "../../components/shared";
 import { formatCurrency, formatDate, isWithinLastDays } from "../../utils/helpers";
@@ -28,17 +31,13 @@ const emptyForm = () => ({
   intake_date: todayIso(),
   trays_received: "",
   loose_eggs_received: "",
+  free_trays: "",
+  free_loose_eggs: "",
   eggs_per_tray: 30,
-  cost_per_tray: "",
+  total_purchase_amount: "",
   supplier_name: "",
   notes: "",
 });
-
-const isAllowedIntakeDay = (date) => {
-  if (!date) return false;
-  const day = new Date(`${date}T00:00:00`).getDay();
-  return day === 1 || day === 4;
-};
 
 const toNumber = (value) => Number(value || 0);
 
@@ -55,16 +54,24 @@ export default function EggIntakePage() {
   const preview = useMemo(() => {
     const trays = toNumber(form.trays_received);
     const looseEggs = toNumber(form.loose_eggs_received);
-    const eggsPerTray = toNumber(form.eggs_per_tray);
-    const costPerTray = toNumber(form.cost_per_tray);
-    const costPerEgg = eggsPerTray > 0 ? costPerTray / eggsPerTray : 0;
-    const totalEggs = Math.round((trays * eggsPerTray) + looseEggs);
-    const totalCost = (trays * costPerTray) + (looseEggs * costPerEgg);
+    const freeTrays = toNumber(form.free_trays);
+    const freeLooseEggs = toNumber(form.free_loose_eggs);
+    const eggsPerTray = toNumber(form.eggs_per_tray) || 30;
+    const totalAmount = toNumber(form.total_purchase_amount);
+
+    const purchasedEggs = Math.round((trays * eggsPerTray) + looseEggs);
+    const freeEggs = Math.round((freeTrays * eggsPerTray) + freeLooseEggs);
+    const totalEggs = purchasedEggs + freeEggs;
+    const costPerEgg = purchasedEggs > 0 ? totalAmount / purchasedEggs : 0;
+    const costPerTray = costPerEgg * eggsPerTray;
 
     return {
+      purchasedEggs,
+      freeEggs,
       totalEggs,
-      totalCost,
       costPerEgg,
+      costPerTray,
+      totalCost: totalAmount,
     };
   }, [form]);
 
@@ -102,8 +109,12 @@ export default function EggIntakePage() {
       nextErrors.loose_eggs_received = "Enter trays or loose eggs";
     }
     if (toNumber(form.loose_eggs_received) < 0) nextErrors.loose_eggs_received = "Must be 0 or more";
+    if (toNumber(form.free_trays) < 0) nextErrors.free_trays = "Must be 0 or more";
+    if (toNumber(form.free_loose_eggs) < 0) nextErrors.free_loose_eggs = "Must be 0 or more";
     if (!form.eggs_per_tray || toNumber(form.eggs_per_tray) <= 0) nextErrors.eggs_per_tray = "Required";
-    if (!form.cost_per_tray || toNumber(form.cost_per_tray) <= 0) nextErrors.cost_per_tray = "Required";
+    if (!form.total_purchase_amount || toNumber(form.total_purchase_amount) < 0) {
+      nextErrors.total_purchase_amount = "Enter total purchase amount";
+    }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -118,10 +129,12 @@ export default function EggIntakePage() {
     try {
       await eggService.createIntake({
         intake_date: form.intake_date,
-        trays_received: Number(form.trays_received),
+        trays_received: Number(form.trays_received || 0),
         loose_eggs_received: Number(form.loose_eggs_received || 0),
+        free_trays: Number(form.free_trays || 0),
+        free_loose_eggs: Number(form.free_loose_eggs || 0),
         eggs_per_tray: Number(form.eggs_per_tray),
-        cost_per_tray: Number(form.cost_per_tray),
+        total_purchase_amount: Number(form.total_purchase_amount),
         supplier_name: form.supplier_name || null,
         notes: form.notes || null,
       });
@@ -178,11 +191,19 @@ export default function EggIntakePage() {
       ),
     },
     { field: "trays_received", label: "Trays", render: (value) => Number(value).toLocaleString("en-IN") },
-    { field: "loose_eggs_received", label: "Loose Eggs", render: (value) => Number(value || 0).toLocaleString("en-IN") },
-    { field: "eggs_per_tray", label: "Eggs/Tray" },
+    { field: "loose_eggs_received", label: "Loose", render: (value) => Number(value || 0).toLocaleString("en-IN") },
+    {
+      field: "free_eggs",
+      label: "Free Eggs",
+      render: (value) => (
+        Number(value || 0) > 0
+          ? <Chip size="small" color="success" variant="outlined" label={`+${Number(value).toLocaleString("en-IN")}`} />
+          : <Typography variant="caption" color="text.secondary">—</Typography>
+      ),
+    },
+    { field: "purchased_eggs", label: "Purchased", render: (value) => Number(value || 0).toLocaleString("en-IN") },
     { field: "total_eggs", label: "Total Eggs", render: (value) => Number(value).toLocaleString("en-IN") },
-    { field: "cost_per_tray", label: "Cost/Tray", render: (value) => formatCurrency(value) },
-    { field: "total_cost", label: "Total Cost", render: (value) => formatCurrency(value) },
+    { field: "total_cost", label: "Amount Paid", render: (value) => formatCurrency(value) },
     { field: "cost_per_egg", label: "Cost/Egg", render: (value) => formatCurrency(value, 4) },
     {
       field: "actions",
@@ -271,22 +292,27 @@ export default function EggIntakePage() {
                   fullWidth
                 />
 
+                {/* ── Purchased eggs ─────────────────────────────────── */}
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
+                  PURCHASED EGGS
+                </Typography>
                 <Grid container spacing={1.5}>
                   <Grid item xs={12} sm={6}>
                     <TextField
-                      label="Trays"
+                      label="Trays Purchased"
                       type="number"
                       value={form.trays_received}
                       onChange={setField("trays_received")}
                       error={Boolean(errors.trays_received)}
                       helperText={errors.trays_received}
                       inputProps={{ min: 0, step: 0.01 }}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><ShoppingCartOutlinedIcon fontSize="small" /></InputAdornment> }}
                       fullWidth
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField
-                      label="Loose Eggs"
+                      label="Loose Eggs Purchased"
                       type="number"
                       value={form.loose_eggs_received}
                       onChange={setField("loose_eggs_received")}
@@ -296,9 +322,45 @@ export default function EggIntakePage() {
                       fullWidth
                     />
                   </Grid>
+                </Grid>
+
+                {/* ── Free (bonus) eggs ──────────────────────────────── */}
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: 0.5 }}>
+                  FREE EGGS
+                </Typography>
+                <Grid container spacing={1.5}>
                   <Grid item xs={12} sm={6}>
                     <TextField
-                      label="Eggs/Tray"
+                      label="Free Trays"
+                      type="number"
+                      value={form.free_trays}
+                      onChange={setField("free_trays")}
+                      error={Boolean(errors.free_trays)}
+                      helperText={errors.free_trays}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      InputProps={{ startAdornment: <InputAdornment position="start"><CardGiftcardOutlinedIcon fontSize="small" /></InputAdornment> }}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Free Loose Eggs"
+                      type="number"
+                      value={form.free_loose_eggs}
+                      onChange={setField("free_loose_eggs")}
+                      error={Boolean(errors.free_loose_eggs)}
+                      helperText={errors.free_loose_eggs}
+                      inputProps={{ min: 0, step: 1 }}
+                      fullWidth
+                    />
+                  </Grid>
+                </Grid>
+
+                {/* ── Eggs per tray + Total amount paid ─────────────── */}
+                <Grid container spacing={1.5}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Eggs / Tray"
                       type="number"
                       value={form.eggs_per_tray}
                       onChange={setField("eggs_per_tray")}
@@ -310,12 +372,12 @@ export default function EggIntakePage() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField
-                      label="Cost/Tray"
+                      label="Total Purchase Amount"
                       type="number"
-                      value={form.cost_per_tray}
-                      onChange={setField("cost_per_tray")}
-                      error={Boolean(errors.cost_per_tray)}
-                      helperText={errors.cost_per_tray}
+                      value={form.total_purchase_amount}
+                      onChange={setField("total_purchase_amount")}
+                      error={Boolean(errors.total_purchase_amount)}
+                      helperText={errors.total_purchase_amount || "Amount paid (excl. free eggs)"}
                       inputProps={{ min: 0, step: 0.01 }}
                       InputProps={{ startAdornment: <InputAdornment position="start">Rs</InputAdornment> }}
                       fullWidth
@@ -323,26 +385,48 @@ export default function EggIntakePage() {
                   </Grid>
                 </Grid>
 
+                {/* ── Live preview ────────────────────────────────────── */}
                 <Grid container spacing={1.5}>
-                  <Grid item xs={12} sm={4}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, bgcolor: "grey.50" }}>
-                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Total Eggs</Typography>
-                      <Typography variant="h6" fontWeight={800}>{preview.totalEggs.toLocaleString("en-IN")}</Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Purchased Eggs</Typography>
+                      <Typography variant="h6" fontWeight={800}>{preview.purchasedEggs.toLocaleString("en-IN")}</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6} sm={4}>
+                    <Box sx={{ border: "1px solid", borderColor: "success.light", borderRadius: 2, p: 1.5, bgcolor: "success.light" }}>
+                      <Typography variant="caption" color="success.dark" fontWeight={700}>Free Eggs</Typography>
+                      <Typography variant="h6" fontWeight={800} color="success.dark">{preview.freeEggs > 0 ? `+${preview.freeEggs.toLocaleString("en-IN")}` : "0"}</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, bgcolor: "grey.50" }}>
-                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Total Cost</Typography>
-                      <Typography variant="h6" fontWeight={800}>{formatCurrency(preview.totalCost)}</Typography>
+                    <Box sx={{ border: "1px solid", borderColor: "primary.200", borderRadius: 2, p: 1.5, bgcolor: "primary.50" }}>
+                      <Typography variant="caption" color="primary.main" fontWeight={700}>Total Eggs</Typography>
+                      <Typography variant="h6" fontWeight={800} color="primary.main">{preview.totalEggs.toLocaleString("en-IN")}</Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={4}>
+                  <Grid item xs={6} sm={6}>
                     <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, bgcolor: "grey.50" }}>
-                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Cost/Egg</Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Cost / Egg</Typography>
                       <Typography variant="h6" fontWeight={800}>{formatCurrency(preview.costPerEgg, 4)}</Typography>
                     </Box>
                   </Grid>
+                  <Grid item xs={6} sm={6}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, bgcolor: "grey.50" }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700}>Cost / Tray</Typography>
+                      <Typography variant="h6" fontWeight={800}>{formatCurrency(preview.costPerTray)}</Typography>
+                    </Box>
+                  </Grid>
                 </Grid>
+
+                {preview.freeEggs > 0 && (
+                  <Alert severity="success" icon={<CardGiftcardOutlinedIcon />}>
+                    {preview.freeEggs.toLocaleString("en-IN")} free eggs will be tracked separately.
+                    Damage &amp; profit will prioritise free eggs first.
+                  </Alert>
+                )}
+
+                <Divider />
 
                 <TextField
                   label="Supplier Name"
@@ -379,4 +463,3 @@ export default function EggIntakePage() {
     </Box>
   );
 }
-

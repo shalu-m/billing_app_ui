@@ -56,9 +56,10 @@ const emptyForm = () => ({
   stock_added_to_opening: 0,
   new_stock_today: 0,
   avg_cost_per_egg: 0,
+  free_stock: 0,
   damaged_eggs: "0",
   notes: "",
-  sale_lines: [{ price_per_egg: "4.50", quantity: "" }],
+  sale_lines: [{ price_per_egg: "", quantity: "" }],
   intake_details: [],
   stock_layers: [],
 });
@@ -118,6 +119,7 @@ function normalizeEntry(entry) {
     stock_added_to_opening: newStock,
     new_stock_today: newStock,
     avg_cost_per_egg: entry.avg_cost_per_egg ?? entry.cost_per_egg ?? 0,
+    free_stock: 0,
     damaged_eggs: String(entry.damaged_eggs ?? 0),
     notes: entry.notes || "",
     sale_lines: saleLines,
@@ -281,6 +283,7 @@ export default function EggEntryPage() {
           stock_added_to_opening: res.new_intake || 0,
           new_stock_today: res.today_intake ?? res.new_intake ?? 0,
           avg_cost_per_egg: res.avg_cost_per_egg || 0,
+          free_stock: res.free_stock || 0,
           intake_details: res.intake_details || [],
           stock_layers: res.stock_layers || [],
         };
@@ -624,10 +627,17 @@ export default function EggEntryPage() {
                 />
 
                 <Grid container spacing={1.5}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} sm={4}>
                     <SummaryTile label="New Stock Today" value={`${Number(form.new_stock_today || 0).toLocaleString("en-IN")} eggs`} />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} sm={4}>
+                    <SummaryTile
+                      label="Free Stock"
+                      value={`${Number(form.free_stock || 0).toLocaleString("en-IN")} eggs`}
+                      tone={Number(form.free_stock) > 0 ? "success" : "default"}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
                     <SummaryTile label="FIFO Cost/Egg" value={formatCurrency(liveCostPerEgg, 4)} />
                   </Grid>
                 </Grid>
@@ -646,28 +656,40 @@ export default function EggEntryPage() {
                     <Collapse in={showStockLayers}>
                       <Box sx={{ p: 1.5, bgcolor: "grey.50", borderRadius: 1, border: "1px solid", borderColor: "divider", mt: 1 }}>
                         <Stack spacing={1}>
-                          {form.stock_layers.map((layer, index) => (
-                            <Box key={`${layer.intake_id}-${index}`} sx={{ p: 1, bgcolor: "white", borderRadius: 1, border: "1px solid", borderColor: "divider" }}>
-                              <Typography variant="caption" color="text.secondary" fontWeight={700}>
-                                Layer {index + 1} - {formatDate(layer.intake_date)}
-                              </Typography>
-                              <Stack direction="row" justifyContent="space-between" mt={0.5}>
-                                <Typography variant="body2">
-                                  {Number(layer.quantity).toLocaleString("en-IN")} eggs
+                          {form.stock_layers.map((layer, index) => {
+                            const purchasedQty = Number(layer.purchased_qty || 0);
+                            const freeQty = Number(layer.free_qty || 0);
+                            const totalEggsInLayer = purchasedQty + freeQty;
+                            const layerAmount = purchasedQty * Number(layer.cost_per_egg || 0);
+
+                            return (
+                              <Box key={`${layer.intake_id}-${index}`} sx={{ p: 1, bgcolor: "white", borderRadius: 1, border: "1px solid", borderColor: "divider" }}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                                  Layer {index + 1} - {formatDate(layer.intake_date)}
                                 </Typography>
-                                <Typography variant="body2" fontWeight={700}>
-                                  @ {formatCurrency(layer.cost_per_egg, 4)}/egg = {formatCurrency(layer.quantity * layer.cost_per_egg)}
-                                </Typography>
-                              </Stack>
-                            </Box>
-                          ))}
+                                <Stack direction="row" justifyContent="space-between" alignItems="center" mt={0.5}>
+                                  <Typography variant="body2">
+                                    {totalEggsInLayer.toLocaleString("en-IN")} eggs
+                                    {freeQty > 0 && (
+                                      <Typography component="span" variant="caption" sx={{ ml: 0.5, color: "success.dark", fontWeight: 600 }}>
+                                        ({freeQty.toLocaleString("en-IN")} free)
+                                      </Typography>
+                                    )}
+                                  </Typography>
+                                  <Typography variant="body2" fontWeight={700}>
+                                    @ {formatCurrency(layer.cost_per_egg, 4)} = {formatCurrency(layerAmount)}
+                                  </Typography>
+                                </Stack>
+                              </Box>
+                            );
+                          })}
                           <Box sx={{ p: 1, bgcolor: "primary.50", borderRadius: 1, border: "2px solid", borderColor: "primary.200" }}>
                             <Stack direction="row" justifyContent="space-between">
                               <Typography variant="body2" fontWeight={800}>
-                                Total: {Number(form.stock_layers.reduce((sum, l) => sum + l.quantity, 0)).toLocaleString("en-IN")} eggs
+                                Total: {Number(form.stock_layers.reduce((sum, l) => sum + Number(l.purchased_qty || 0) + Number(l.free_qty || 0), 0)).toLocaleString("en-IN")} eggs
                               </Typography>
                               <Typography variant="body2" fontWeight={800}>
-                                {formatCurrency(form.stock_layers.reduce((sum, l) => sum + (l.quantity * l.cost_per_egg), 0))}
+                                {formatCurrency(form.stock_layers.reduce((sum, l) => sum + (Number(l.purchased_qty || 0) * Number(l.cost_per_egg || 0)), 0))}
                               </Typography>
                             </Stack>
                           </Box>
