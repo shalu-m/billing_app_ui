@@ -225,6 +225,9 @@ export default function EggEntryPage() {
   const [entries, setEntries] = useState([]);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [saleLinesEntry, setSaleLinesEntry] = useState(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalEntries, setTotalEntries] = useState(0);
   const [historyFilters, setHistoryFilters] = useState({ from: "", to: "" });
   const [errors, setErrors] = useState({});
   const [openingLoading, setOpeningLoading] = useState(false);
@@ -236,6 +239,7 @@ export default function EggEntryPage() {
   const [openingRefreshKey, setOpeningRefreshKey] = useState(0);
   const formRef = useRef(null);
   const { confirm, dialogProps } = useConfirm();
+  const perPage = 10;
 
   const computed = useMemo(() => calcEggEntry(form), [form]);
   const rawClosingStock = toNumber(form.opening_stock) - computed.totalSold - toNumber(form.damaged_eggs);
@@ -310,16 +314,19 @@ export default function EggEntryPage() {
   const loadEntries = useCallback(async () => {
     try {
       setEntriesLoading(true);
-      const hasDateFilter = Boolean(historyFilters.from || historyFilters.to);
-      const params = hasDateFilter
-        ? {
-          from: historyFilters.from || undefined,
-          to: historyFilters.to || undefined,
-        }
-        : { page: 1, per_page: 10 };
+      const params = {
+        from: historyFilters.from || undefined,
+        to: historyFilters.to || undefined,
+        page,
+        per_page: perPage,
+      };
       const res = await eggService.list(params);
       const rows = res.data || [];
       setEntries(rows);
+      if (res.meta) {
+        setTotalPages(res.meta.last_page || 1);
+        setTotalEntries(res.meta.total || 0);
+      }
       setSelectedEntry((current) => rows.find((row) => row.id === current?.id) || rows[0] || null);
       setSaleLinesEntry((current) => rows.find((row) => row.id === current?.id) || null);
     } catch (error) {
@@ -327,7 +334,7 @@ export default function EggEntryPage() {
     } finally {
       setEntriesLoading(false);
     }
-  }, [historyFilters.from, historyFilters.to]);
+  }, [historyFilters.from, historyFilters.to, page]);
 
   useEffect(() => {
     loadEntries();
@@ -581,7 +588,10 @@ export default function EggEntryPage() {
                     type="date"
                     size="small"
                     value={historyFilters.from}
-                    onChange={(event) => setHistoryFilters((current) => ({ ...current, from: event.target.value }))}
+                    onChange={(event) => {
+                      setHistoryFilters((current) => ({ ...current, from: event.target.value }));
+                      setPage(1);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     sx={{ minWidth: 150 }}
                   />
@@ -590,11 +600,17 @@ export default function EggEntryPage() {
                     type="date"
                     size="small"
                     value={historyFilters.to}
-                    onChange={(event) => setHistoryFilters((current) => ({ ...current, to: event.target.value }))}
+                    onChange={(event) => {
+                      setHistoryFilters((current) => ({ ...current, to: event.target.value }));
+                      setPage(1);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     sx={{ minWidth: 150 }}
                   />
-                  <Button variant="outlined" onClick={() => setHistoryFilters({ from: "", to: "" })}>
+                  <Button variant="outlined" onClick={() => {
+                    setHistoryFilters({ from: "", to: "" });
+                    setPage(1);
+                  }}>
                     Reset
                   </Button>
                 </Stack>
@@ -607,12 +623,17 @@ export default function EggEntryPage() {
                   emptyMessage="No egg entries yet."
                 />
 
-                <Box sx={{ pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {historyFilters.from || historyFilters.to
-                      ? `${entries.length} entries found`
-                      : `${entries.length} latest entries shown`}
-                  </Typography>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="caption" color="text.secondary">{totalEntries} entries found</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button size="small" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>
+                      Prev
+                    </Button>
+                    <Typography variant="caption">Page {page} of {totalPages || 1}</Typography>
+                    <Button size="small" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
+                      Next
+                    </Button>
+                  </Stack>
                 </Box>
               </Stack>
             </CardContent>

@@ -45,11 +45,15 @@ export default function EggIntakePage() {
   const [form, setForm] = useState(emptyForm());
   const [filters, setFilters] = useState({ from: "", to: "" });
   const [intakes, setIntakes] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalIntakes, setTotalIntakes] = useState(0);
   const [totals, setTotals] = useState({});
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const { confirm, dialogProps } = useConfirm();
+  const perPage = 10;
 
   const preview = useMemo(() => {
     const trays = toNumber(form.trays_received);
@@ -85,16 +89,21 @@ export default function EggIntakePage() {
       const res = await eggService.listIntakes({
         from: filters.from || undefined,
         to: filters.to || undefined,
-        per_page: 10,
+        page,
+        per_page: perPage,
       });
       setIntakes(res.data || []);
       setTotals(res.totals || {});
+      if (res.meta) {
+        setTotalPages(res.meta.last_page || 1);
+        setTotalIntakes(res.meta.total || 0);
+      }
     } catch (error) {
       setToast({ open: true, message: "Failed to load egg intakes.", severity: "error" });
     } finally {
       setLoading(false);
     }
-  }, [filters.from, filters.to]);
+  }, [filters.from, filters.to, page]);
 
   useEffect(() => {
     loadIntakes();
@@ -242,7 +251,10 @@ export default function EggIntakePage() {
                     type="date"
                     size="small"
                     value={filters.from}
-                    onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))}
+                    onChange={(event) => {
+                      setFilters((current) => ({ ...current, from: event.target.value }));
+                      setPage(1);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     sx={{ minWidth: 150 }}
                   />
@@ -251,11 +263,17 @@ export default function EggIntakePage() {
                     type="date"
                     size="small"
                     value={filters.to}
-                    onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))}
+                    onChange={(event) => {
+                      setFilters((current) => ({ ...current, to: event.target.value }));
+                      setPage(1);
+                    }}
                     InputLabelProps={{ shrink: true }}
                     sx={{ minWidth: 150 }}
                   />
-                  <Button variant="outlined" onClick={() => setFilters({ from: "", to: "" })}>
+                  <Button variant="outlined" onClick={() => {
+                    setFilters({ from: "", to: "" });
+                    setPage(1);
+                  }}>
                     Reset
                   </Button>
                 </Stack>
@@ -267,6 +285,19 @@ export default function EggIntakePage() {
                   rows={intakes}
                   emptyMessage="No egg intakes found."
                 />
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="caption" color="text.secondary">{totalIntakes} entries found</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button size="small" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>
+                      Prev
+                    </Button>
+                    <Typography variant="caption">Page {page} of {totalPages || 1}</Typography>
+                    <Button size="small" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
+                      Next
+                    </Button>
+                  </Stack>
+                </Box>
               </Stack>
             </CardContent>
           </Card>
