@@ -59,7 +59,7 @@ const emptyForm = () => ({
   free_stock: 0,
   damaged_eggs: "0",
   notes: "",
-  sale_lines: [{ price_per_egg: "", quantity: "" }],
+  sale_lines: [{ price_per_egg: "", trays_sold: "", loose_eggs_sold: "", eggs_per_tray: 30, quantity: "" }],
   intake_details: [],
   stock_layers: [],
 });
@@ -119,12 +119,14 @@ function normalizeEntry(entry) {
     stock_added_to_opening: newStock,
     new_stock_today: newStock,
     avg_cost_per_egg: entry.avg_cost_per_egg ?? entry.cost_per_egg ?? 0,
-    free_stock: 0,
+    free_stock: entry.free_stock ?? 0,
     damaged_eggs: String(entry.damaged_eggs ?? 0),
     notes: entry.notes || "",
     sale_lines: saleLines,
     intake_details: [],
-    stock_layers: [],
+    // Keep stock_layers from the entry if present — they will be refreshed
+    // by loadOpeningStock, but having them here avoids a blank flash.
+    stock_layers: Array.isArray(entry.stock_layers) ? entry.stock_layers : [],
   };
 }
 
@@ -229,6 +231,9 @@ export default function EggEntryPage() {
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const [showStockLayers, setShowStockLayers] = useState(false);
+  // A counter we can increment to force loadOpeningStock to re-run even when
+  // entry_date hasn't changed (e.g. after saving an entry for today).
+  const [openingRefreshKey, setOpeningRefreshKey] = useState(0);
   const formRef = useRef(null);
   const { confirm, dialogProps } = useConfirm();
 
@@ -267,13 +272,20 @@ export default function EggEntryPage() {
     }));
   };
 
-  const loadOpeningStock = useCallback(async (date) => {
+  /**
+   * Fetch opening stock for a given date, with an optional ignoreEntryId
+   * so that when editing we exclude the current entry from the calculation.
+   */
+  const loadOpeningStock = useCallback(async (date, ignoreEntryId = null) => {
     if (!date) return;
 
     try {
       setOpeningLoading(true);
-      const res = await eggService.openingStock({ date });
+      const params = { date };
+      if (ignoreEntryId) params.ignore_entry_id = ignoreEntryId;
+      const res = await eggService.openingStock(params);
       setForm((current) => {
+        // Guard: only apply if the form date still matches (avoid stale updates)
         if (current.entry_date !== date) return current;
 
         return {
@@ -304,7 +316,7 @@ export default function EggEntryPage() {
           from: historyFilters.from || undefined,
           to: historyFilters.to || undefined,
         }
-        : { page: 1, per_page: 20 };
+        : { page: 1, per_page: 10 };
       const res = await eggService.list(params);
       const rows = res.data || [];
       setEntries(rows);
@@ -321,9 +333,17 @@ export default function EggEntryPage() {
     loadEntries();
   }, [loadEntries]);
 
+  // Re-fetch opening stock whenever date or the refresh counter changes.
+  // We read the current entry id from a ref to avoid it being a stale dep.
+  const currentEntryIdRef = useRef(null);
   useEffect(() => {
-    loadOpeningStock(form.entry_date);
-  }, [form.entry_date, loadOpeningStock]);
+    currentEntryIdRef.current = form.id;
+  }, [form.id]);
+
+  useEffect(() => {
+    loadOpeningStock(form.entry_date, currentEntryIdRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.entry_date, openingRefreshKey, loadOpeningStock]);
 
   const validate = () => {
     const nextErrors = {};
@@ -335,8 +355,8 @@ export default function EggEntryPage() {
     ));
 
     if (!form.entry_date) nextErrors.entry_date = "Required";
-    if (form.id && !isWithinLastDays(form.entry_date, 5)) {
-      nextErrors.entry_date = "Edit allowed only for the last 5 days";
+    if (form.id && !isWithinLastDays(form.entry_date, 15)) {
+      nextErrors.entry_date = "Edit allowed only for the last 15 days";
     }
     if (!activeLines.length) nextErrors.sale_lines = "Add at least one sale line";
     activeLines.forEach((line) => {
@@ -370,7 +390,9 @@ export default function EggEntryPage() {
     const nextForm = emptyForm();
     setForm(nextForm);
     setErrors({});
-    loadOpeningStock(nextForm.entry_date);
+    // Bump the refresh key so opening stock reloads for today even if the
+    // date field value hasn't changed (same day save scenario).
+    setOpeningRefreshKey((k) => k + 1);
   };
 
   const handleSave = async () => {
@@ -400,20 +422,28 @@ export default function EggEntryPage() {
   };
 
   const handleEditEntry = (entry) => {
-    if (!isWithinLastDays(entry.entry_date, 5)) {
-      setToast({ open: true, message: "Only entries from the last 5 days can be edited.", severity: "warning" });
+    if (!isWithinLastDays(entry.entry_date, 15)) {
+      setToast({ open: true, message: "Only entries from the last 15 days can be edited.", severity: "warning" });
       return;
     }
 
     setSelectedEntry(entry);
-    setForm(normalizeEntry(entry));
+    const normalized = normalizeEntry(entry);
+    setForm(normalized);
     setErrors({});
+
+    // Always force-reload opening stock for the edit date, passing the entry's
+    // id so the backend excludes it from the calculation (same as update flow).
+    // We call directly here instead of relying on the useEffect so it fires
+    // even when the date hasn't changed (e.g. editing today's entry).
+    loadOpeningStock(normalized.entry_date, entry.id);
+
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
 
   const handleDeleteEntry = async (entry) => {
-    if (!isWithinLastDays(entry.entry_date, 5)) {
-      setToast({ open: true, message: "Only entries from the last 5 days can be deleted.", severity: "warning" });
+    if (!isWithinLastDays(entry.entry_date, 15)) {
+      setToast({ open: true, message: "Only entries from the last 15 days can be deleted.", severity: "warning" });
       return;
     }
 
@@ -498,7 +528,7 @@ export default function EggEntryPage() {
       label: "",
       align: "right",
       render: (_, row) => {
-        if (!isWithinLastDays(row.entry_date, 5)) return null;
+        if (!isWithinLastDays(row.entry_date, 15)) return null;
 
         return (
           <Stack direction="row" spacing={0.5} justifyContent="flex-end">
@@ -536,7 +566,7 @@ export default function EggEntryPage() {
   return (
     <Box>
       <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={7}>
+        <Grid item xs={12} lg={7} sx={{ order: { xs: 2, lg: 1 } }}>
           <Card>
             <CardContent>
               <Stack spacing={2}>
@@ -589,7 +619,7 @@ export default function EggEntryPage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} lg={5}>
+        <Grid item xs={12} lg={5} sx={{ order: { xs: 1, lg: 2 } }}>
           <Card ref={formRef}>
             <CardContent>
               <Stack spacing={2.2}>
@@ -665,7 +695,7 @@ export default function EggEntryPage() {
                             return (
                               <Box key={`${layer.intake_id}-${index}`} sx={{ p: 1, bgcolor: "white", borderRadius: 1, border: "1px solid", borderColor: "divider" }}>
                                 <Typography variant="caption" color="text.secondary" fontWeight={700}>
-                                  Layer {index + 1} - {formatDate(layer.intake_date)}
+                                  Layer {index + 1} — {formatDate(layer.intake_date)}
                                 </Typography>
                                 <Stack direction="row" justifyContent="space-between" alignItems="center" mt={0.5}>
                                   <Typography variant="body2">

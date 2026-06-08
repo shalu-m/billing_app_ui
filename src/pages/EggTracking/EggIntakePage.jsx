@@ -85,7 +85,7 @@ export default function EggIntakePage() {
       const res = await eggService.listIntakes({
         from: filters.from || undefined,
         to: filters.to || undefined,
-        per_page: 50,
+        per_page: 10,
       });
       setIntakes(res.data || []);
       setTotals(res.totals || {});
@@ -152,8 +152,8 @@ export default function EggIntakePage() {
   };
 
   const handleDelete = async (intake) => {
-    if (!isWithinLastDays(intake.intake_date, 5)) {
-      setToast({ open: true, message: "Only intakes from the last 5 days can be deleted.", severity: "warning" });
+    if (!isWithinLastDays(intake.intake_date, 15)) {
+      setToast({ open: true, message: "Only intakes from the last 15 days can be deleted.", severity: "warning" });
       return;
     }
 
@@ -210,7 +210,7 @@ export default function EggIntakePage() {
       label: "",
       align: "right",
       render: (_, row) => {
-        if (!isWithinLastDays(row.intake_date, 5)) return null;
+        if (!isWithinLastDays(row.intake_date, 15)) return null;
 
         return (
           <Button
@@ -231,9 +231,8 @@ export default function EggIntakePage() {
 
   return (
     <Box>
-
       <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={7}>
+        <Grid item xs={12} lg={7} sx={{ order: { xs: 2, lg: 1 } }}>
           <Card>
             <CardContent>
               <Stack spacing={2}>
@@ -273,7 +272,7 @@ export default function EggIntakePage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} lg={5}>
+        <Grid item xs={12} lg={5} sx={{ order: { xs: 1, lg: 2 } }}>
           <Card>
             <CardContent>
               <Stack spacing={2.2}>
